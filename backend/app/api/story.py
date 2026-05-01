@@ -25,6 +25,7 @@ from app.models.schemas import (
     StoryChoice,
     SearchFactionRequest,
     Organization,
+    NPCRelationship,
 )
 
 router = APIRouter(prefix="/api/story", tags=["story"])
@@ -156,6 +157,24 @@ async def create_story(request: CreateStoryRequest):
             except Exception as e:
                 print(f"Skipping invalid plot trigger {p.get('title')}: {e}")
         story_config.plot_triggers = valid_triggers
+
+    # --- Initial NPCs (Relationships) ---
+    if world_data.get("initial_npcs"):
+        valid_npcs = []
+        for npc in world_data["initial_npcs"]:
+            try:
+                valid_npcs.append(NPCRelationship(
+                    npc_name=npc.get("npc_name", "Unknown"),
+                    npc_title=npc.get("npc_title", ""),
+                    trust=npc.get("trust", 50),
+                    affection=npc.get("affection", 50),
+                    hostility=npc.get("hostility", 0),
+                    last_interaction_chapter=0,
+                ))
+            except Exception as e:
+                print(f"Skipping invalid NPC {npc.get('npc_name')}: {e}")
+        story_config.character.relationships = valid_npcs
+        print(f"[WORLD BUILDER] Created {len(valid_npcs)} initial NPC relationships")
 
     # Save to MongoDB
     await db.stories.insert_one(story_config.model_dump())

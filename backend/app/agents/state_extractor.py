@@ -85,6 +85,9 @@ Read the story chapter below and determine EXACTLY what changed in the character
 # CURRENT CHARACTER STATE (Before this chapter)
 {character_state}
 
+# AVAILABLE LOCATIONS (with IDs)
+{available_locations}
+
 # EXTRACTION RULES
 1. Only report ACTUAL changes that happened in the chapter text. Do NOT invent changes.
 2. If nothing changed for a category, return empty/zero values.
@@ -93,7 +96,9 @@ Read the story chapter below and determine EXACTLY what changed in the character
 5. Be precise with numbers. Small interactions = small changes (±5). Major events = larger changes (±15-30).
 6. DYNAMIC WORLD: If the chapter mentions a NEW location, faction, or acquirable item that doesn't exist in the current state, add it to `new_locations`, `new_organizations`, or `new_shop_items` respectively. Only add genuinely new discoveries.
 7. TRAITS: Look closely at the "traits" in the CURRENT CHARACTER STATE. If the narrative implies a change to any of these traits (e.g., getting hurt -> lower health, seeing a ghost -> higher fear/ám ảnh), output it in `trait_changes`.
-8. BẮT BUỘC: Viết tất cả nội dung (mood, thoughts, tên vật phẩm, mô tả) bằng TIẾNG VIỆT.
+8. LOCATION: If the chapter describes the character ARRIVING at or ENTERING a specific place listed in AVAILABLE LOCATIONS, output its `location_id` in `current_location_id`. This is CRITICAL for map tracking.
+9. RELATIONSHIPS: If the character interacts with ANY named NPC (talking, fighting, meeting), ALWAYS add a `RelationshipChange` for that NPC. Set `trust_change`, `affection_change`, or `hostility_change` based on the interaction type. For first meetings, create a new relationship entry.
+10. BẮT BUỘC: Viết tất cả nội dung (mood, thoughts, tên vật phẩm, mô tả) bằng TIẾNG VIỆT.
 """
 
 
@@ -121,18 +126,27 @@ async def state_extractor_node(state: GraphState) -> GraphState:
     char = config.get("character", {})
 
     # Build a compact character state string (save tokens)
+    locations = config.get("locations", [])
+    current_loc = next((l for l in locations if l.get("is_current")), None)
     compact_char = {
         "name": char.get("name"),
+        "current_location": current_loc.get("name") if current_loc else "Unknown",
+        "current_location_id": current_loc.get("location_id") if current_loc else "",
         "mood": char.get("psychology", {}).get("mood"),
         "stress": char.get("psychology", {}).get("stress_level"),
         "traits": [f"{t.get('name')}: {t.get('current_value')}/{t.get('max_value')}" for t in char.get("traits", [])],
         "currencies": char.get("economy", {}).get("currencies"),
         "inventory": [it.get("name") for it in char.get("economy", {}).get("inventory", [])],
-        "relationships": [f"{r.get('npc_name')} (trust:{r.get('trust')})" for r in char.get("relationships", [])],
+        "relationships": [f"{r.get('npc_name')} (trust:{r.get('trust')}, affection:{r.get('affection')})" for r in char.get("relationships", [])],
     }
 
+    available_locs_str = "\n".join(
+        [f"- {l.get('location_id')}: {l.get('name')}" for l in locations]
+    ) or "No locations defined yet."
+
     prompt_str = SYSTEM_PROMPT.format(
-        character_state=json.dumps(compact_char, ensure_ascii=False, indent=2)
+        character_state=json.dumps(compact_char, ensure_ascii=False, indent=2),
+        available_locations=available_locs_str,
     )
 
     try:

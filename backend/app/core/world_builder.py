@@ -66,6 +66,10 @@ async def generate_world_and_character(genre: str, world_description: str, chara
         "plot_triggers": [
             {{"title": "Sự kiện 1", "description": "Chuyện gì xảy ra", "importance": 8, "probability": 0.5, "earliest_chapter": 2}}
             // Tạo 2 sự kiện dựa theo tiểu sử
+        ],
+        "initial_npcs": [
+            {{"npc_name": "Tên NPC", "npc_title": "Vai trò (VD: Bác sĩ, Kẻ đượng phố)", "trust": 50, "affection": 50, "hostility": 0}}
+            // Tạo 2-4 NPC ban đầu mà nhân vật có mối quan hệ (bạn bè, đối thủ, người thân, người quen)
         ]
     }}
     """
@@ -79,7 +83,7 @@ async def generate_world_and_character(genre: str, world_description: str, chara
         if match:
             data = json.loads(match.group(0))
             # Ensure all array fields exist to prevent frontend crash
-            for key in ["locations", "organizations", "shop_items", "traits", "abilities", "skills", "plot_triggers"]:
+            for key in ["locations", "organizations", "shop_items", "traits", "abilities", "skills", "plot_triggers", "initial_npcs"]:
                 if key not in data or data[key] is None:
                     data[key] = []
             return data
