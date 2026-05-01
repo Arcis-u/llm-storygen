@@ -412,6 +412,13 @@ async def process_turn(request: PlayerActionRequest):
         # ─── 6. Save Chapter to MongoDB ───
         await db.chapters.insert_one(new_chapter.model_dump())
 
+        # ─── 6.5. Hardcode Location Update if Move Action ───
+        if request.action_type == "move":
+            target = request.target_location_id or request.custom_action
+            if target:
+                state_changes["current_location_id"] = target
+                print(f"[FALLBACK] Forced current_location_id to {target}")
+
         # ─── 7. Apply State Changes via Robust State Merger ───
         merge_result = await apply_state_changes(
             story_id=request.story_id,

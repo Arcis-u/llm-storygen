@@ -83,17 +83,35 @@ export default function CityMap({ locations, onMoveAction }: Props) {
 
   const nodes: Node[] = useMemo(() => {
     const SCALE = 8; // Scale 0-100 to 0-800 pixel space for proper spacing
-    return locations.map((loc) => ({
-      id: loc.location_id,
-      type: "location",
-      data: {
-        label: loc.name,
-        is_current: loc.is_current,
-        is_unlocked: loc.is_unlocked,
-        shortFunction: loc.function.substring(0, 30) + (loc.function.length > 30 ? "..." : ""),
-      },
-      position: { x: loc.x_position * SCALE, y: loc.y_position * SCALE },
-    }));
+    const positions = new Set<string>();
+
+    return locations.map((loc) => {
+      let nx = loc.x_position;
+      let ny = loc.y_position;
+      
+      // Simple anti-collision: if position is taken, spiral out slightly
+      let radius = 2;
+      let angle = 0;
+      while (positions.has(`${Math.round(nx)},${Math.round(ny)}`)) {
+        nx = loc.x_position + Math.cos(angle) * radius;
+        ny = loc.y_position + Math.sin(angle) * radius;
+        angle += 0.5;
+        radius += 0.5;
+      }
+      positions.add(`${Math.round(nx)},${Math.round(ny)}`);
+
+      return {
+        id: loc.location_id,
+        type: "location",
+        data: {
+          label: loc.name,
+          is_current: loc.is_current,
+          is_unlocked: loc.is_unlocked,
+          shortFunction: loc.function.substring(0, 30) + (loc.function.length > 30 ? "..." : ""),
+        },
+        position: { x: nx * SCALE, y: ny * SCALE },
+      };
+    });
   }, [locations]);
 
   const edges: Edge[] = useMemo(() => {

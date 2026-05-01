@@ -39,6 +39,25 @@ async def apply_state_changes(story_id: str, state_changes: dict, chapter_number
     except Exception as e:
         merge_log.append(f"[SKIP] Psychology merge failed: {e}")
 
+    # ─── 1.5. CUSTOM TRAITS ──────────────────────────────────────
+    try:
+        trait_changes = state_changes.get("trait_changes", [])
+        for tc in trait_changes:
+            trait_name = str(tc.get("trait_name", ""))
+            delta = _safe_float(tc.get("change_amount", 0))
+            if not trait_name or delta == 0:
+                continue
+            
+            existing = next((t for t in config.character.traits if t.name.lower() == trait_name.lower()), None)
+            if existing:
+                existing.current_value = max(existing.min_value, min(existing.max_value, existing.current_value + delta))
+                merge_log.append(f"Trait: {existing.name} {delta:+.1f} -> {existing.current_value}")
+            else:
+                # If AI invents a new trait (rare but possible), we could add it, but safer to ignore
+                merge_log.append(f"[SKIP] Trait '{trait_name}' not found in CharacterState")
+    except Exception as e:
+        merge_log.append(f"[SKIP] Traits merge failed: {e}")
+
     # ─── 2. ECONOMY: CURRENCIES ──────────────────────────────────
     try:
         econ = state_changes.get("economy", {})

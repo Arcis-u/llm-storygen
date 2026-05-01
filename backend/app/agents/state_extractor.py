@@ -43,8 +43,13 @@ class FactionChange(BaseModel):
     reputation_change: int = 0
     new_status: str = Field(default="", description="unaware/known/member/leader/enemy. Empty = no change.")
 
+class TraitChange(BaseModel):
+    trait_name: str
+    change_amount: float = Field(description="Positive or negative change to the trait value.")
+
 class StateDiff(BaseModel):
     psychology: PsychologyChange
+    trait_changes: list[TraitChange] = Field(default_factory=list, description="Changes to custom character traits (e.g. Lý trí, Ám ảnh, Thể lực).")
     economy: EconomyChange
     relationships: list[RelationshipChange] = Field(default_factory=list)
     factions: list[FactionChange] = Field(default_factory=list)
@@ -87,7 +92,8 @@ Read the story chapter below and determine EXACTLY what changed in the character
 4. For `triggered_events`: list the titles of any major plot events that occurred.
 5. Be precise with numbers. Small interactions = small changes (±5). Major events = larger changes (±15-30).
 6. DYNAMIC WORLD: If the chapter mentions a NEW location, faction, or acquirable item that doesn't exist in the current state, add it to `new_locations`, `new_organizations`, or `new_shop_items` respectively. Only add genuinely new discoveries.
-7. BẮT BUỘC: Viết tất cả nội dung (mood, thoughts, tên vật phẩm, mô tả) bằng TIẾNG VIỆT.
+7. TRAITS: Look closely at the "traits" in the CURRENT CHARACTER STATE. If the narrative implies a change to any of these traits (e.g., getting hurt -> lower health, seeing a ghost -> higher fear/ám ảnh), output it in `trait_changes`.
+8. BẮT BUỘC: Viết tất cả nội dung (mood, thoughts, tên vật phẩm, mô tả) bằng TIẾNG VIỆT.
 """
 
 
@@ -119,6 +125,7 @@ async def state_extractor_node(state: GraphState) -> GraphState:
         "name": char.get("name"),
         "mood": char.get("psychology", {}).get("mood"),
         "stress": char.get("psychology", {}).get("stress_level"),
+        "traits": [f"{t.get('name')}: {t.get('current_value')}/{t.get('max_value')}" for t in char.get("traits", [])],
         "currencies": char.get("economy", {}).get("currencies"),
         "inventory": [it.get("name") for it in char.get("economy", {}).get("inventory", [])],
         "relationships": [f"{r.get('npc_name')} (trust:{r.get('trust')})" for r in char.get("relationships", [])],
