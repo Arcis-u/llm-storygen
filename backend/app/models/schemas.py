@@ -123,7 +123,7 @@ class Organization(BaseModel):
     )
     public_description: str = Field(default="", description="Public knowledge (can be factual if real)")
     hidden_lore: str = Field(default="", description="Fictional secrets tied to the story")
-    join_requirements: dict[str, int] = Field(
+    join_requirements: dict[str, str | float | int | None] = Field(
         default_factory=dict, 
         description="Stat or trait thresholds needed to join"
     )
@@ -178,9 +178,9 @@ class NPCRelationship(BaseModel):
     npc_name: str
     npc_title: str = Field(default="", description="E.g., 'The Blacksmith', 'Shadow Priestess'")
     tier: RelationshipTier = Field(default=RelationshipTier.STRANGER)
-    trust: float = Field(default=50.0, ge=0.0, le=100.0)
-    affection: float = Field(default=50.0, ge=0.0, le=100.0)
-    hostility: float = Field(default=0.0, ge=0.0, le=100.0)
+    trust: float = Field(default=50.0)
+    affection: float = Field(default=50.0)
+    hostility: float = Field(default=0.0)
     debt: float = Field(default=0.0, description="Positive=they owe you, Negative=you owe them")
     notes: str = Field(default="", description="AI-generated summary of key interactions")
     last_interaction_chapter: int = Field(default=0)
