@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# Environment
+.env
+.env.local
+!.env.example
+
+# Build output
+.next/
+out/
+dist/
+
+# IDE
+.vscode/
+.idea/
+
+# Docker volumes
+mongo_data/
+qdrant_data/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
