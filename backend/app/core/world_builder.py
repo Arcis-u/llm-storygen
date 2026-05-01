@@ -81,7 +81,10 @@ async def generate_world_and_character(genre: str, world_description: str, chara
         # Parse JSON
         match = re.search(r'\{[\s\S]*\}', content)
         if match:
-            data = json.loads(match.group(0))
+            json_str = match.group(0)
+            # Remove trailing commas before closing brackets to fix strict JSON parsing
+            json_str = re.sub(r',\s*([\]}])', r'\1', json_str)
+            data = json.loads(json_str)
             # Ensure all array fields exist to prevent frontend crash
             for key in ["locations", "organizations", "shop_items", "traits", "abilities", "skills", "plot_triggers", "initial_npcs"]:
                 if key not in data or data[key] is None:

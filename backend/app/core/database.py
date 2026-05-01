@@ -89,6 +89,19 @@ async def init_databases() -> None:
         except Exception as e:
             print(f"[DB] Could not verify Qdrant collection: {e}")
 
+    # Ensure payload index exists for story_id filtering
+    try:
+        from qdrant_client.models import PayloadSchemaType
+        qdrant.create_payload_index(
+            collection_name=settings.qdrant_collection_name,
+            field_name="story_id",
+            field_schema=PayloadSchemaType.KEYWORD,
+        )
+        print(f"[DB] Verified Qdrant payload index for 'story_id'")
+    except Exception as e:
+        # Ignore if it already exists, qdrant-client might throw if it exists in some versions, or just log
+        pass
+
 
 async def close_databases() -> None:
     """Gracefully close all database connections."""

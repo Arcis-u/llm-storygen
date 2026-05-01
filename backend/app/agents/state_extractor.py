@@ -106,7 +106,7 @@ async def state_extractor_node(state: GraphState) -> GraphState:
     print("--- NODE 4: STATE EXTRACTOR ---")
 
     settings = get_settings()
-    if not (settings.openai_api_key or settings.gemini_api_key or settings.groq_api_key or settings.huggingface_api_key):
+    if not (settings.openai_api_key or settings.gemini_api_key or settings.groq_api_key or settings.huggingface_api_key or settings.alibaba_api_key):
         print("[WARNING] No API key. Returning empty state diff.")
         state["state_changes"] = {
             "psychology": {"stress_change": 0, "mood": "neutral", "current_thoughts": "Thinking about the future."},
