@@ -110,10 +110,15 @@ async def state_extractor_node(state: GraphState) -> GraphState:
         print("[WARNING] No API key. Returning empty state diff.")
         state["state_changes"] = {
             "psychology": {"stress_change": 0, "mood": "neutral", "current_thoughts": "Thinking about the future."},
+            "trait_changes": [],
             "economy": {"currency_changes": {}, "inventory_changes": []},
             "relationships": [],
             "factions": [],
+            "current_location_id": "",
             "triggered_events": [],
+            "new_locations": [],
+            "new_shop_items": [],
+            "new_organizations": [],
             "is_game_over": False
         }
         state["is_game_over"] = False
@@ -189,10 +194,15 @@ async def state_extractor_node(state: GraphState) -> GraphState:
             print(f"[STATE EXTRACTOR ERROR] Both methods failed: {e2}")
             state["state_changes"] = {
                 "psychology": {"stress_change": 5, "mood": "tense", "current_thoughts": "Processing what just happened."},
+                "trait_changes": [],
                 "economy": {"currency_changes": {}, "inventory_changes": []},
                 "relationships": [],
                 "factions": [],
+                "current_location_id": "",
                 "triggered_events": [],
+                "new_locations": [],
+                "new_shop_items": [],
+                "new_organizations": [],
                 "is_game_over": False
             }
             state["is_game_over"] = False
