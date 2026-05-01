@@ -26,6 +26,16 @@ services:
         sync: false
       - key: HUGGINGFACE_API_KEY
         sync: false
+      - key: EMBEDDING_MODEL
+        value: "text-embedding-v4"
+      - key: DIRECTOR_MODEL
+        value: "qwen-max"
+      - key: WRITER_MODEL
+        value: "qwen-max"
+      - key: EDITOR_MODEL
+        value: "qwen-max"
+      - key: GAMEMASTER_MODEL
+        value: "qwen-max"
       - key: OPENAI_API_KEY
         sync: false
       - key: GEMINI_API_KEY
