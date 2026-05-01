@@ -37,39 +37,40 @@ async def generate_world_and_character(genre: str, world_description: str, chara
        - "skills" (Kỹ năng): Khả năng HỌC ĐƯỢC qua rèn luyện (VD: Bắn súng, Lập trình, Đột nhập, Nấu ăn).
     4. Địa điểm, Thế lực, và Vật phẩm cửa hàng phải ĐỘC ĐÁO, bám sát tiểu sử và thế giới. Không dùng các từ chung chung như "Khu vực phía Bắc".
     
-    # CẤU TRÚC JSON YÊU CẦU
+    # CẤU TRÚC JSON YÊU CẦU (Tạo số lượng phần tử theo yêu cầu dưới đây, TUYỆT ĐỐI KHÔNG ghi chú // trong JSON)
+    - Tạo 4-5 địa điểm (locations), nối với nhau hợp lý.
+    - Tạo 2-3 thế lực (organizations).
+    - Tạo 4-5 vật phẩm (shop_items) phù hợp bối cảnh.
+    - Tạo 3-4 chỉ số traits (VD: Lý trí, Phóng xạ, Thể lực).
+    - Tạo 1-2 thiên phú BẨM SINH (abilities).
+    - Tạo 2-3 kỹ năng HỌC ĐƯỢC (skills).
+    - Tạo 2 sự kiện dựa theo tiểu sử (plot_triggers).
+    - Tạo 2-4 NPC ban đầu (initial_npcs).
+
     {{
         "locations": [
             {{"location_id": "loc_1", "name": "Tên địa điểm 1", "description": "Mô tả chi tiết", "function": "Chức năng (VD: Nghỉ ngơi)", "benefits": "Lợi ích", "risks": "Rủi ro", "is_current": true, "x_position": 50, "y_position": 50, "connected_to": ["loc_2"]}}
-            // Tạo 4-5 địa điểm, nối với nhau hợp lý
         ],
         "organizations": [
             {{"org_id": "org_1", "name": "Tên thế lực", "type": "corporate/gang/cult/etc", "public_description": "Mô tả", "danger_level": 5, "benefits_description": "Lợi ích khi gia nhập", "join_requirements": {{"Tiền": 100}}}}
-            // Tạo 2-3 thế lực
         ],
         "shop_items": [
             {{"item_id": "item_1", "name": "Tên vật phẩm", "category": "Vũ khí/Thuốc/Công cụ", "price": 50, "currency_type": "Gold/Credits/etc", "description": "Mô tả", "narrative_impact": "Tác dụng trong truyện", "is_consumable": false}}
-            // Tạo 4-5 vật phẩm phù hợp bối cảnh
         ],
         "traits": [
             {{"name": "Tên chỉ số", "description": "Mô tả", "current_value": 50, "max_value": 100, "min_value": 0, "story_impact": "Ảnh hưởng cốt truyện"}}
-            // Tạo 3-4 chỉ số (VD: Lý trí, Phóng xạ, Thể lực)
         ],
         "abilities": [
             {{"name": "Thiên phú 1", "description": "Mô tả", "origin": "Bẩm sinh/Đột biến", "power_level": 1, "side_effects": [{{"description": "Tác dụng phụ", "trait_affected": "Tên chỉ số (nếu có)", "impact_amount": -10, "narrative_consequence": "Hậu quả"}}], "cooldown_turns": 3}}
-            // Tạo 1-2 thiên phú BẨM SINH
         ],
         "skills": [
             {{"name": "Kỹ năng 1", "description": "Mô tả", "proficiency": 5, "source": "Học từ đâu"}}
-            // Tạo 2-3 kỹ năng HỌC ĐƯỢC
         ],
         "plot_triggers": [
             {{"title": "Sự kiện 1", "description": "Chuyện gì xảy ra", "importance": 8, "probability": 0.5, "earliest_chapter": 2}}
-            // Tạo 2 sự kiện dựa theo tiểu sử
         ],
         "initial_npcs": [
             {{"npc_name": "Tên NPC", "npc_title": "Vai trò (VD: Bác sĩ, Kẻ đượng phố)", "trust": 50, "affection": 50, "hostility": 0}}
-            // Tạo 2-4 NPC ban đầu mà nhân vật có mối quan hệ (bạn bè, đối thủ, người thân, người quen)
         ]
     }}
     """
@@ -79,19 +80,23 @@ async def generate_world_and_character(genre: str, world_description: str, chara
         content = response.content if hasattr(response, 'content') else str(response)
         
         # Parse JSON
-        match = re.search(r'\{[\s\S]*\}', content)
-        if match:
-            json_str = match.group(0)
-            # Remove trailing commas before closing brackets to fix strict JSON parsing
-            json_str = re.sub(r',\s*([\]}])', r'\1', json_str)
-            data = json.loads(json_str)
-            # Ensure all array fields exist to prevent frontend crash
-            for key in ["locations", "organizations", "shop_items", "traits", "abilities", "skills", "plot_triggers", "initial_npcs"]:
-                if key not in data or data[key] is None:
-                    data[key] = []
-            return data
-        else:
-            raise ValueError("No JSON found in LLM output")
+        from langchain_core.utils.json import parse_json_markdown
+        try:
+            data = parse_json_markdown(content)
+        except Exception as parse_e:
+            print(f"[JSON FIX] Fallback parsing due to: {parse_e}")
+            # Try regex extraction if pure parse fails
+            match = re.search(r'\{[\s\S]*\}', content)
+            if match:
+                data = parse_json_markdown(match.group(0))
+            else:
+                raise ValueError("No JSON found in LLM output")
+                
+        # Ensure all array fields exist to prevent frontend crash
+        for key in ["locations", "organizations", "shop_items", "traits", "abilities", "skills", "plot_triggers", "initial_npcs"]:
+            if key not in data or data[key] is None:
+                data[key] = []
+        return data
             
     except Exception as e:
         print(f"[ERROR] Auto-generating world and profile failed: {e}")
