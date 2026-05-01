@@ -665,6 +665,8 @@ html, body {
 
 button:hover > .choice-hover-fx {
   left: 150%;
+}
+
 .choice-card-wrapper .choice-desc {
   display: grid;
   grid-template-rows: 0fr;
