@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: "standalone",
+  // Removed output: "standalone" to fix Vercel 404 routing issue
 };
 
 export default nextConfig;
