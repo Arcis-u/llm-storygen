@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     mongodb_url: str = Field(default="mongodb://localhost:27017")
     mongodb_db_name: str = Field(default="interactive_story")
     qdrant_url: str = Field(default="http://localhost:6333")
+    qdrant_api_key: str = Field(default="")
     qdrant_collection_name: str = Field(default="story_memory")
     
     # --- Admin Dashboard ---
