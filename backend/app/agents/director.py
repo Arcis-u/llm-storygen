@@ -195,7 +195,7 @@ async def director_node(state: GraphState) -> GraphState:
     print("--- NODE 2: DIRECTOR (ReAct) ---")
 
     settings = get_settings()
-    if not (settings.openai_api_key or settings.anthropic_api_key or settings.gemini_api_key or settings.groq_api_key):
+    if not (settings.alibaba_api_key or settings.openai_api_key or settings.anthropic_api_key or settings.gemini_api_key or settings.groq_api_key):
         state["director_plan"] = "[MOCK] The character explores. Something dramatic happens."
         state["web_search_results"] = []
         state["plot_triggers_activated"] = []

@@ -76,7 +76,7 @@ async def writer_node(state: GraphState) -> GraphState:
     print("--- NODE 3: WRITER ---")
 
     settings = get_settings()
-    if not (settings.openai_api_key or settings.anthropic_api_key or settings.gemini_api_key or settings.groq_api_key or settings.huggingface_api_key):
+    if not (settings.alibaba_api_key or settings.openai_api_key or settings.anthropic_api_key or settings.gemini_api_key or settings.groq_api_key or settings.huggingface_api_key):
         state["chapter_content"] = (
             "[MOCK CHAPTER]\n\n"
             "You step through the threshold. The air shifts — heavier, charged with something you can't name. "
