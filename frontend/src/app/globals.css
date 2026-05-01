@@ -665,16 +665,19 @@ html, body {
 
 button:hover > .choice-hover-fx {
   left: 150%;
+.choice-card-wrapper .choice-desc {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 0;
+  margin-top: 0;
 }
 
-.choice-card-wrapper .choice-desc {
-  display: block;
+/* When the parent container is hovered, ALL choice descriptions expand */
+.choices-grid-container:hover .choice-card-wrapper .choice-desc {
+  grid-template-rows: 1fr;
   opacity: 1;
   margin-top: 0.5rem;
-}
-
-.choice-card-wrapper:hover .choice-desc {
-  /* No special hover needed anymore */
 }
 
 .choice-card-wrapper .choice-desc-inner {

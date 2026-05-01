@@ -902,6 +902,7 @@ function StoryPanel() {
           {/* Choices Grid */}
           {currentChoices.length > 0 && (
             <div
+              className="choices-grid-container"
               style={{
                 display: "grid",
                 gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
