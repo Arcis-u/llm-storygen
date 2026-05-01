@@ -1,6 +1,7 @@
 version: '3.8'
 
 services:
+  # --- Databases ---
   mongodb:
     image: mongo:7
     container_name: story_mongodb
@@ -20,6 +21,35 @@ services:
       - "6334:6334"
     volumes:
       - qdrant_data:/qdrant/storage
+    restart: unless-stopped
+
+  # --- Backend (FastAPI) ---
+  backend:
+    build: ./backend
+    container_name: story_backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    environment:
+      MONGODB_URL: mongodb://mongodb:27017
+      QDRANT_URL: http://qdrant:6333
+    depends_on:
+      - mongodb
+      - qdrant
+    restart: unless-stopped
+
+  # --- Frontend (Next.js) ---
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+    container_name: story_frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
     restart: unless-stopped
 
 volumes:
