@@ -29,13 +29,13 @@ services:
       - key: EMBEDDING_MODEL
         value: "text-embedding-v4"
       - key: DIRECTOR_MODEL
-        value: "qwen-max"
+        value: "alibaba/qwen3.5-plus"
       - key: WRITER_MODEL
-        value: "qwen-max"
+        value: "alibaba/qwen3.5-plus"
       - key: EDITOR_MODEL
-        value: "qwen-max"
+        value: "alibaba/qwen3.6-flash"
       - key: GAMEMASTER_MODEL
-        value: "qwen-max"
+        value: "alibaba/qwen3.6-flash"
       - key: OPENAI_API_KEY
         sync: false
       - key: GEMINI_API_KEY
