@@ -11,14 +11,16 @@ if sys.stdout.encoding != 'utf-8':
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
+import time
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
 from app.core.database import init_databases, close_databases
 from app.api.story import router as story_router
+from app.api.system import router as system_router
 
 
 @asynccontextmanager
@@ -60,8 +62,34 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# --- Telemetry Middleware ---
+from app.api.system import TELEMETRY, TRAFFIC_LOG
+@app.middleware("http")
+async def add_telemetry(request: Request, call_next):
+    start_time = time.perf_counter()
+    status_code = 500
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        return response
+    except Exception as e:
+        TELEMETRY["failed_requests"] += 1
+        raise e
+    finally:
+        process_time_ms = (time.perf_counter() - start_time) * 1000
+        TELEMETRY["total_requests"] += 1
+        TELEMETRY["total_latency_ms"] += process_time_ms
+        if status_code >= 400:
+            TELEMETRY["failed_requests"] += 1
+        
+        # Don't log the spammy /status route itself to keep the log clean
+        if request.url.path != "/api/system/status":
+            log_entry = f"[{time.strftime('%H:%M:%S')}] [{request.method}] {request.url.path} -> {status_code} ({process_time_ms:.1f}ms)"
+            TRAFFIC_LOG.append(log_entry)
+
 # --- Mount Routers ---
 app.include_router(story_router)
+app.include_router(system_router)
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):

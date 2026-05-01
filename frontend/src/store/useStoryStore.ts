@@ -233,6 +233,7 @@ const initialCharacter: CharacterState = {
   backstory: '',
   traits: [],
   abilities: [],
+  skills: [],
   psychology: {
     current_thoughts: '',
     stress_level: 20,

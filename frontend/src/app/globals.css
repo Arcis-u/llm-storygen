@@ -252,6 +252,224 @@ html, body {
   pointer-events: none;
 }
 
+/* ============================================================
+   SPOTLIGHT EFFECT (Mouse Tracking)
+   ============================================================ */
+.spotlight-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--panel-radius);
+  background: var(--bg-glass-medium);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: transform 0.3s ease, border-color 0.3s ease;
+}
+
+.spotlight-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.spotlight-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(
+    800px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
+    rgba(255, 255, 255, 0.06),
+    transparent 40%
+  );
+  pointer-events: none;
+  z-index: 0;
+  transition: opacity 0.3s ease;
+  opacity: 0;
+}
+
+.spotlight-card:hover::before {
+  opacity: 1;
+}
+
+/* ============================================================
+   SIMULATED HUD COMPONENTS
+   ============================================================ */
+/* Terminal Typing */
+.terminal-cursor {
+  display: inline-block;
+  width: 8px;
+  height: 15px;
+  background-color: var(--accent-secondary);
+  animation: blink 1s step-end infinite;
+  vertical-align: middle;
+  margin-left: 2px;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* Radar Sweep */
+.radar-circle {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 245, 212, 0.3);
+  overflow: hidden;
+  box-shadow: inset 0 0 20px rgba(0, 245, 212, 0.1);
+  background: 
+    linear-gradient(90deg, transparent 49.5%, rgba(0, 245, 212, 0.2) 49.5%, rgba(0, 245, 212, 0.2) 50.5%, transparent 50.5%),
+    linear-gradient(0deg, transparent 49.5%, rgba(0, 245, 212, 0.2) 49.5%, rgba(0, 245, 212, 0.2) 50.5%, transparent 50.5%);
+}
+
+.radar-sweep {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 50%;
+  height: 50%;
+  background: linear-gradient(45deg, rgba(0,245,212,0.4) 0%, transparent 100%);
+  transform-origin: 0% 0%;
+  animation: radar-spin 4s linear infinite;
+}
+
+@keyframes radar-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.radar-ping {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 10px #fff, 0 0 20px var(--accent-secondary);
+  animation: ping-fade 4s infinite;
+}
+
+@keyframes ping-fade {
+  0% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0; transform: scale(2); }
+  100% { opacity: 0; transform: scale(2); }
+}
+
+/* Simulated HP Bar */
+.sim-hp-container {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+
+.sim-hp-fill {
+  height: 100%;
+  background: var(--accent-success);
+  box-shadow: 0 0 10px var(--accent-success);
+  transition: width 0.3s ease;
+}
+
+.sim-hp-pulse {
+  position: absolute;
+  top: 0; left: 0; height: 100%; width: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.5), transparent);
+  animation: hp-pulse 2s infinite linear;
+}
+
+@keyframes hp-pulse {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+
+/* ============================================================
+   ACCORDION GENRE SHOWCASE
+   ============================================================ */
+.accordion-container {
+  display: flex;
+  gap: 1rem;
+  width: 100%;
+  height: 500px;
+}
+
+
+
+.accordion-item {
+  position: relative;
+  flex: 1;
+  border-radius: 20px;
+  overflow: hidden;
+  transition: flex 0.5s cubic-bezier(0.16, 1, 0.3, 1), filter 0.5s ease, box-shadow 0.5s ease, border-color 0.5s ease;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  filter: grayscale(20%) brightness(0.7);
+  box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+}
+
+.accordion-item:hover {
+  flex: 3;
+  filter: grayscale(0%) brightness(1);
+  box-shadow: 
+    0 20px 50px -10px rgba(0,0,0,0.9), 
+    0 0 30px var(--theme-color, rgba(255,255,255,0.2)),
+    inset 0 0 40px var(--theme-color, transparent);
+  border-color: var(--theme-color, rgba(255, 255, 255, 0.3));
+  z-index: 5;
+}
+
+.accordion-bg {
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 100%;
+  object-fit: cover;
+  transition: transform 10s ease;
+}
+
+.accordion-item:hover .accordion-bg {
+  transform: scale(1.1);
+}
+
+.accordion-content {
+  position: absolute;
+  bottom: 0; left: 0; width: 100%;
+  padding: 2rem;
+  background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.5) 60%, transparent 100%);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.4s ease 0.1s, transform 0.4s ease 0.1s;
+}
+
+.accordion-item:hover .accordion-content {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.accordion-title {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-90deg);
+  font-size: 1.8rem;
+  font-weight: 800;
+  letter-spacing: 6px;
+  text-transform: uppercase;
+  color: #ffffff;
+  text-shadow: 0 4px 20px rgba(0,0,0,0.9), 0 0 15px rgba(0,0,0,0.7), 0 0 5px rgba(0,0,0,0.5);
+  white-space: nowrap;
+  transition: opacity 0.3s ease;
+  z-index: 2;
+}
+
+.accordion-item:hover .accordion-title {
+  opacity: 0;
+}
+
+
 .glass-card {
   background: linear-gradient(145deg, rgba(30, 30, 45, 0.4), rgba(15, 15, 25, 0.6));
   backdrop-filter: blur(16px);

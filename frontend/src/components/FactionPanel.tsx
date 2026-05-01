@@ -32,13 +32,10 @@ export default function FactionPanel({ storyId, organizations, onJoinAction }: P
         // Update the global store with the new faction if it's new
         if (res.status === "success") {
           useStoryStore.setState((state) => {
-            const orgExists = state.config?.available_organizations?.some(o => o.org_id === res.faction.org_id);
-            if (!orgExists && state.config) {
+            const orgExists = state.worldOrganizations?.some((o: any) => o.org_id === res.faction.org_id);
+            if (!orgExists) {
               return {
-                config: {
-                  ...state.config,
-                  available_organizations: [...(state.config.available_organizations || []), res.faction]
-                }
+                worldOrganizations: [...(state.worldOrganizations || []), res.faction]
               };
             }
             return state;
