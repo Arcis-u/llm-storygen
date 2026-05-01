@@ -91,12 +91,12 @@ class PlotTrigger(BaseModel):
     """
     title: str
     description: str
-    importance: int = Field(default=5, ge=1, le=10, description="1=minor flavor, 10=critical arc")
+    importance: float = Field(default=5.0, description="1=minor flavor, 10=critical arc")
     probability: float = Field(
-        default=0.5, ge=0.0, le=1.0,
+        default=0.5,
         description="Likelihood of occurring (0.0-1.0)"
     )
-    earliest_chapter: int = Field(default=1, description="Cannot trigger before this chapter")
+    earliest_chapter: float = Field(default=1.0, description="Cannot trigger before this chapter")
     triggered: bool = Field(default=False)
     triggered_at_chapter: Optional[int] = None
     related_traits: list[str] = Field(
@@ -270,7 +270,7 @@ class CharacterSkill(BaseModel):
     """A specific skill the character has learned."""
     name: str
     description: str
-    proficiency: int = Field(default=1, ge=1, le=100)
+    proficiency: float = Field(default=1.0)
     source: str = Field(default="", description="How it was learned (e.g., 'Military training')")
 
 

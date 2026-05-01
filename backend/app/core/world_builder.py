@@ -30,22 +30,25 @@ async def generate_world_and_character(genre: str, world_description: str, chara
     Tiểu sử: {backstory}
     
     # YÊU CẦU QUAN TRỌNG
-    1. BẮT BUỘC trả lời bằng TIẾNG VIỆT 100%.
+    1. BẮT BUỘC trả lời bằng TIẾNG VIỆT.
     2. Chỉ trả về DUY NHẤT một chuỗi JSON hợp lệ, không bọc trong markdown ```json.
     3. Phân biệt rõ RÀNG:
        - "abilities" (Thiên phú): Khả năng TỰ NHIÊN, BẨM SINH (VD: Thể lực siêu phàm, Trực giác, Máu rồng).
        - "skills" (Kỹ năng): Khả năng HỌC ĐƯỢC qua rèn luyện (VD: Bắn súng, Lập trình, Đột nhập, Nấu ăn).
     4. Địa điểm, Thế lực, và Vật phẩm cửa hàng phải ĐỘC ĐÁO, bám sát tiểu sử và thế giới. Không dùng các từ chung chung như "Khu vực phía Bắc".
     
-    # CẤU TRÚC JSON YÊU CẦU (Tạo số lượng phần tử theo yêu cầu dưới đây, TUYỆT ĐỐI KHÔNG ghi chú // trong JSON)
-    - Tạo 4-5 địa điểm (locations), nối với nhau hợp lý.
-    - Tạo 2-3 thế lực (organizations).
-    - Tạo 4-5 vật phẩm (shop_items) phù hợp bối cảnh.
-    - Tạo 3-4 chỉ số traits (VD: Lý trí, Phóng xạ, Thể lực).
-    - Tạo 1-2 thiên phú BẨM SINH (abilities).
-    - Tạo 2-3 kỹ năng HỌC ĐƯỢC (skills).
-    - Tạo 2 sự kiện dựa theo tiểu sử (plot_triggers).
-    - Tạo 2-4 NPC ban đầu (initial_npcs).
+    # CẤU TRÚC JSON YÊU CẦU (TUYỆT ĐỐI KHÔNG ghi chú // trong JSON)
+    BẠN LÀ GAME MASTER. BẠN PHẢI SÁNG TẠO DỮ LIỆU THẬT, CHI TIẾT VÀ BÁM SÁT TIỂU SỬ. 
+    KHÔNG ĐƯỢC COPY NGUYÊN XI CÁC CHỮ MẪU NHƯ "Tên địa điểm 1" HAY "Kỹ năng 1".
+    TUYỆT ĐỐI KHÔNG ĐƯỢC ĐỂ TRỐNG BẤT KỲ MẢNG NÀO (Mọi array đều phải có dữ liệu bên trong).
+    - Tạo 4-5 địa điểm (locations) cực kỳ chi tiết, nối với nhau hợp lý.
+    - Tạo 2-3 thế lực (organizations) nguy hiểm/bí ẩn.
+    - Tạo 4-5 vật phẩm (shop_items) độc đáo.
+    - Tạo 3-4 chỉ số traits mang tính cách nhân vật (VD: Lý trí, Nhiễm Độc, Máu Lạnh).
+    - Tạo 1-2 thiên phú BẨM SINH (abilities) siêu phàm.
+    - Tạo 2-3 kỹ năng HỌC ĐƯỢC (skills) chuyên nghiệp.
+    - Tạo 2 sự kiện cốt truyện (plot_triggers) kịch tính.
+    - Tạo 2-4 NPC ban đầu (initial_npcs) có quan hệ sâu sắc.
 
     {{
         "locations": [
