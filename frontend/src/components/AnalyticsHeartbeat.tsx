@@ -16,6 +16,7 @@ export default function AnalyticsHeartbeat() {
     }
 
     const sendHeartbeat = async () => {
+      try {
         const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
         await axios.post(`${baseUrl}/api/analytics/heartbeat`, {
           session_id: sessionId,
