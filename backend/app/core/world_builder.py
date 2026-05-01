@@ -78,6 +78,10 @@ async def generate_world_and_character(genre: str, world_description: str, chara
         match = re.search(r'\{[\s\S]*\}', content)
         if match:
             data = json.loads(match.group(0))
+            # Ensure all array fields exist to prevent frontend crash
+            for key in ["locations", "organizations", "shop_items", "traits", "abilities", "skills", "plot_triggers"]:
+                if key not in data or data[key] is None:
+                    data[key] = []
             return data
         else:
             raise ValueError("No JSON found in LLM output")

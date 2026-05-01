@@ -97,15 +97,19 @@ async def gamemaster_node(state: GraphState) -> GraphState:
         ]
         response = await llm.ainvoke(messages)
         raw = response.content if hasattr(response, 'content') else str(response)
-        
-        # Strip markdown code fences if present
-        raw = re.sub(r'^```(?:json)?\s*', '', raw.strip())
-        raw = re.sub(r'\s*```$', '', raw.strip())
-        
-        json_match = re.search(r'\{[\s\S]*\}', raw)
-        if json_match:
-            parsed = json_lib.loads(json_match.group())
+        # Robust JSON extraction
+        start = raw.find('{')
+        end = raw.rfind('}')
+        if start != -1 and end != -1 and end > start:
+            json_str = raw[start:end+1]
+            parsed = json_lib.loads(json_str)
             choices_data = parsed.get("choices", [])
+            
+            # Fallback if LLM didn't wrap in "choices" key but just returned a list inside dict?
+            # Or if it returned empty, generate fallbacks.
+            if not choices_data:
+                raise ValueError("Parsed JSON but 'choices' array is missing or empty")
+
             # Ensure choice_id is set
             for i, c in enumerate(choices_data):
                 if "choice_id" not in c:
@@ -113,7 +117,7 @@ async def gamemaster_node(state: GraphState) -> GraphState:
             state["choices"] = choices_data[:3]
             print(f"[GAME MASTER] {len(state['choices'])} choices generated.")
         else:
-            raise ValueError("No JSON found in response")
+            raise ValueError("No JSON object '{...}' found in response")
     except Exception as e:
         print(f"[GAME MASTER ERROR] Failed: {e}")
         state["choices"] = [

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, Suspense } from "react";
+import React, { useState, useEffect, useRef, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSearchParams } from "next/navigation";
 import {
@@ -78,6 +78,17 @@ function TypewriterText({ text, speed = 15 }: { text: string; speed?: number }) 
     </div>
   );
 }
+
+// ============================================================
+// Memoized Chapter Component
+// ============================================================
+const MemoizedChapter = React.memo(({ content }: { content: string }) => {
+  return (
+    <div className="story-text">
+      <ReactMarkdown>{content}</ReactMarkdown>
+    </div>
+  );
+}, (prevProps, nextProps) => prevProps.content === nextProps.content);
 
 // ============================================================
 // Stat Bar Component
@@ -452,6 +463,7 @@ function StoryPanel() {
   const isBusy = isLoading || isProcessing;
   const [customInput, setCustomInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [activeChapter, setActiveChapter] = useState<number | null>(null);
   const [isTocOpen, setIsTocOpen] = useState(false);
   const [readMode, setReadMode] = useState<"continuous" | "single">("continuous");
@@ -480,33 +492,42 @@ function StoryPanel() {
   const handleScroll = () => {
     if (readMode !== "continuous") return; // Only track scroll in continuous mode
     if (!scrollRef.current) return;
-    const container = scrollRef.current;
-    const chapterElements = container.querySelectorAll('.chapter-container');
-    const containerRect = container.getBoundingClientRect();
     
-    // The "reading line" is 40% down from the top of the container
-    const triggerY = containerRect.top + containerRect.height * 0.4; 
+    if (scrollTimeoutRef.current) return; // Throttled
 
-    let newActive = activeChapter;
-    chapterElements.forEach((el) => {
-      const rect = el.getBoundingClientRect();
-      // If the top of the chapter has scrolled past the reading line
-      if (rect.top <= triggerY) {
-        const chapterNum = parseInt(el.getAttribute('data-chapter') || "1");
-        newActive = chapterNum;
+    scrollTimeoutRef.current = setTimeout(() => {
+      scrollTimeoutRef.current = null;
+      if (!scrollRef.current) return;
+      
+      const container = scrollRef.current;
+      const chapterElements = container.querySelectorAll('.chapter-container');
+      const containerRect = container.getBoundingClientRect();
+      
+      // The "reading line" is 40% down from the top of the container
+      const triggerY = containerRect.top + containerRect.height * 0.4; 
+
+      let newActive = activeChapter;
+      chapterElements.forEach((el) => {
+        const rect = el.getBoundingClientRect();
+        // If the top of the chapter has scrolled past the reading line
+        if (rect.top <= triggerY) {
+          const chapterNum = parseInt(el.getAttribute('data-chapter') || "1");
+          newActive = chapterNum;
+        }
+      });
+
+      if (newActive !== activeChapter) {
+        setActiveChapter(newActive);
       }
-    });
-
-    if (newActive !== activeChapter) {
-      setActiveChapter(newActive);
-    }
+    }, 100); // 100ms throttle
   };
 
   useEffect(() => {
-    if (readMode === "continuous" && scrollRef.current) {
-      // Only auto-scroll to bottom on update if we are in continuous mode
+    // Only auto-scroll to bottom if a new chapter was added
+    if (readMode === "continuous" && scrollRef.current && chapters.length > prevChapterCount.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
+
   }, [chapters, readMode]);
 
   const handleChoice = async (choiceId: number) => {
@@ -812,39 +833,40 @@ function StoryPanel() {
             <p style={{ fontSize: "0.85rem" }}>Nhập hành động khởi đầu của bạn vào terminal bên dưới.</p>
           </div>
         ) : (
-          (readMode === "continuous" ? chapters : chapters.filter(c => c.chapter_number === activeChapter)).map((ch, i) => (
-            <motion.div
-              id={`chapter-${ch.chapter_number}`}
-              key={`ch-${ch.chapter_number}-${i}`}
-              className="chapter-container"
-              data-chapter={ch.chapter_number}
-              initial={{ opacity: 0, y: 20, filter: "blur(4px)" }}
-              animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-              transition={{ duration: 0.8, ease: "easeOut" }}
-              style={{ marginBottom: "2rem", position: "relative" }}
-            >
-              {i > 0 && (
-                <div style={{ display: "flex", alignItems: "center", margin: "3rem 0", opacity: 0.3 }}>
-                  <div style={{ flex: 1, height: "1px", background: "linear-gradient(90deg, transparent, var(--accent-primary))" }} />
-                  <Target size={14} style={{ margin: "0 1rem", color: "var(--accent-primary)" }} />
-                  <div style={{ flex: 1, height: "1px", background: "linear-gradient(270deg, transparent, var(--accent-primary))" }} />
+          <AnimatePresence mode="wait">
+            {(readMode === "continuous" ? chapters : chapters.filter(c => c.chapter_number === activeChapter)).map((ch, i) => (
+              <motion.div
+                id={`chapter-${ch.chapter_number}`}
+                key={`ch-${ch.chapter_number}`}
+                className="chapter-container"
+                data-chapter={ch.chapter_number}
+                initial={{ opacity: 0, y: 20, filter: "blur(4px)" }}
+                animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                exit={readMode === "single" ? { opacity: 0, y: -20, filter: "blur(4px)" } : undefined}
+                transition={{ duration: 0.5, ease: "easeOut" }}
+                style={{ marginBottom: "2rem", position: "relative" }}
+              >
+                {i > 0 && readMode === "continuous" && (
+                  <div style={{ display: "flex", alignItems: "center", margin: "3rem 0", opacity: 0.3 }}>
+                    <div style={{ flex: 1, height: "1px", background: "linear-gradient(90deg, transparent, var(--accent-primary))" }} />
+                    <Target size={14} style={{ margin: "0 1rem", color: "var(--accent-primary)" }} />
+                    <div style={{ flex: 1, height: "1px", background: "linear-gradient(270deg, transparent, var(--accent-primary))" }} />
+                  </div>
+                )}
+                
+                {/* AAA Scene Banner */}
+                <div style={{ position: "relative", width: "100%", height: "200px", borderRadius: "1rem", overflow: "hidden", marginBottom: "2rem", border: "1px solid rgba(255,255,255,0.05)" }}>
+                  <Image src={i % 2 === 0 ? "/images/darkfantasybanner.png" : "/images/cyberpunkbanner.png"} alt="Scene" fill style={{ objectFit: "cover", opacity: 0.5, mixBlendMode: "luminosity" }} />
+                  <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", background: "linear-gradient(180deg, transparent 0%, rgba(5,5,10,1) 100%)" }} />
+                  <div style={{ position: "absolute", bottom: "1rem", left: "1.5rem", fontWeight: 800, fontSize: "1.2rem", letterSpacing: "2px", textShadow: "0 2px 10px rgba(0,0,0,0.8)", color: "var(--accent-secondary)", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <MapPin size={18} /> {ch.chapter_number === 1 ? "ĐIỂM KHỞI ĐẦU" : `PHÂN ĐOẠN ${ch.chapter_number}`}
+                  </div>
                 </div>
-              )}
-              
-              {/* AAA Scene Banner */}
-              <div style={{ position: "relative", width: "100%", height: "200px", borderRadius: "1rem", overflow: "hidden", marginBottom: "2rem", border: "1px solid rgba(255,255,255,0.05)" }}>
-                <Image src={i % 2 === 0 ? "/images/darkfantasybanner.png" : "/images/cyberpunkbanner.png"} alt="Scene" fill style={{ objectFit: "cover", opacity: 0.5, mixBlendMode: "luminosity" }} />
-                <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", background: "linear-gradient(180deg, transparent 0%, rgba(5,5,10,1) 100%)" }} />
-                <div style={{ position: "absolute", bottom: "1rem", left: "1.5rem", fontWeight: 800, fontSize: "1.2rem", letterSpacing: "2px", textShadow: "0 2px 10px rgba(0,0,0,0.8)", color: "var(--accent-secondary)", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                  <MapPin size={18} /> {ch.chapter_number === 1 ? "ĐIỂM KHỞI ĐẦU" : `PHÂN ĐOẠN ${ch.chapter_number}`}
-                </div>
-              </div>
 
-              <div className="story-text">
-                <ReactMarkdown>{ch.content}</ReactMarkdown>
-              </div>
-            </motion.div>
-          ))
+                <MemoizedChapter content={ch.content} />
+              </motion.div>
+            ))}
+          </AnimatePresence>
         )}
 
         {/* Loading indicator */}

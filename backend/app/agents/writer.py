@@ -106,7 +106,7 @@ async def writer_node(state: GraphState) -> GraphState:
             HumanMessage(content="Write the chapter now. Make it unforgettable.")
         ]
         response: WriterOutput = await structured_llm.ainvoke(messages)
-        state["chapter_title"] = response.chapter_title
+        state["chapter_title"] = response.chapter_title.strip().strip('"').strip("'")
         state["chapter_content"] = response.chapter_content
         state["chapter_summary"] = response.chapter_summary
         print(f"[WRITER] Chapter written via structured output ({len(response.chapter_content)} chars)")

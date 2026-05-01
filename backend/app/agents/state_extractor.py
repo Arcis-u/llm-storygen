@@ -153,16 +153,17 @@ async def state_extractor_node(state: GraphState) -> GraphState:
             response = await llm.ainvoke(messages)
             raw = response.content if hasattr(response, 'content') else str(response)
             
-            # Try to extract JSON from response
-            import re
-            json_match = re.search(r'\{[\s\S]*\}', raw)
-            if json_match:
-                parsed = json.loads(json_match.group())
+            # Robust JSON extraction
+            start = raw.find('{')
+            end = raw.rfind('}')
+            if start != -1 and end != -1 and end > start:
+                json_str = raw[start:end+1]
+                parsed = json.loads(json_str)
                 state["state_changes"] = parsed
                 state["is_game_over"] = parsed.get("is_game_over", False)
-                print(f"[STATE EXTRACTOR] Extracted via JSON parsing")
+                print(f"[STATE EXTRACTOR] Extracted via robust JSON parsing")
             else:
-                raise ValueError("No JSON found in response")
+                raise ValueError("No JSON object '{...}' found in response")
         except Exception as e2:
             print(f"[STATE EXTRACTOR ERROR] Both methods failed: {e2}")
             state["state_changes"] = {
