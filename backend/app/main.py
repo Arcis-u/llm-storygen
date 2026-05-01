@@ -21,6 +21,7 @@ from app.core.config import get_settings
 from app.core.database import init_databases, close_databases
 from app.api.story import router as story_router
 from app.api.system import router as system_router
+from app.api.analytics import router as analytics_router
 
 
 @asynccontextmanager
@@ -90,6 +91,7 @@ async def add_telemetry(request: Request, call_next):
 # --- Mount Routers ---
 app.include_router(story_router)
 app.include_router(system_router)
+app.include_router(analytics_router)
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):

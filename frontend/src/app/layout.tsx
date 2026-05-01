@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import AnalyticsHeartbeat from "@/components/AnalyticsHeartbeat";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -32,6 +33,7 @@ export default function RootLayout({
       <body>
         <div className="noise-overlay" aria-hidden="true" />
         <div className="ambient-bg" aria-hidden="true" />
+        <AnalyticsHeartbeat />
         {children}
       </body>
     </html>

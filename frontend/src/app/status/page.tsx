@@ -59,7 +59,8 @@ export default function PanoramaDashboard() {
   useEffect(() => {
     const fetchStatus = async () => {
       try {
-        const res = await axios.get("http://localhost:8000/api/system/status");
+        const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+        const res = await axios.get(`${baseUrl}/api/system/status`);
         setData(res.data);
         setError(null);
       } catch (err: any) {
@@ -248,10 +249,13 @@ export default function PanoramaDashboard() {
                 {data.api_core.traffic_log.length > 0 ? (
                   data.api_core.traffic_log.map((log: string, idx: number) => {
                     const isError = log.includes("-> 4") || log.includes("-> 5");
+                    const timeEnd = log.indexOf("]") + 1;
+                    const timestamp = log.substring(0, timeEnd);
+                    const message = log.substring(timeEnd);
                     return (
                       <div key={idx} style={{ marginBottom: "0.2rem" }}>
-                        <span style={{ color: "rgba(255,255,255,0.3)", marginRight: "10px" }}>{log.split("]")[0]}]</span>
-                        <span style={{ color: isError ? "#ef4444" : "#00f5d4" }}>{log.split("]")[1]}</span>
+                        <span style={{ color: "rgba(255,255,255,0.3)", marginRight: "10px" }}>{timestamp}</span>
+                        <span style={{ color: isError ? "#ef4444" : "#00f5d4" }}>{message}</span>
                       </div>
                     );
                   })

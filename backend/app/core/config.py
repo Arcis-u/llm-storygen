@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     mongodb_db_name: str = Field(default="interactive_story")
     qdrant_url: str = Field(default="http://localhost:6333")
     qdrant_collection_name: str = Field(default="story_memory")
+    
+    # --- Admin Dashboard ---
+    admin_password: str = Field(default="secret_admin_123")
 
     # --- LLM API Keys ---
     openai_api_key: str = Field(default="")
