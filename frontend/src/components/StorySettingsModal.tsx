@@ -10,6 +10,7 @@ interface StorySettingsModalProps {
   initialTitle: string;
   initialCoverImage?: string;
   characterData: any; // Using any for brevity here, should ideally be CharacterState
+  storyData: any; // Added for world description, tone, etc.
   onSettingsUpdated: () => void;
 }
 
@@ -20,6 +21,7 @@ export default function StorySettingsModal({
   initialTitle,
   initialCoverImage,
   characterData,
+  storyData,
   onSettingsUpdated,
 }: StorySettingsModalProps) {
   const [activeTab, setActiveTab] = useState<"character" | "settings">("character");
@@ -153,6 +155,25 @@ export default function StorySettingsModal({
 
           {activeTab === "settings" && (
             <div style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
+              {/* Truyện Info (Read Only) */}
+              <div className="bg-white/5 p-4 rounded-lg border border-white/10">
+                <h4 className="font-bold mb-3 text-cyan-400">Thông tin Khởi tạo (Read-only)</h4>
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <span className="text-xs text-gray-500 uppercase block mb-1">Thể loại</span>
+                    <span className="font-medium text-sm bg-black/30 px-2 py-1 rounded capitalize">{storyData?.genre?.replace("_", " ")}</span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-gray-500 uppercase block mb-1">Tone & Vibe</span>
+                    <span className="font-medium text-sm bg-black/30 px-2 py-1 rounded">{storyData?.tone}</span>
+                  </div>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500 uppercase block mb-1">Mô tả Thế giới</span>
+                  <p className="text-sm text-gray-400 leading-relaxed bg-black/30 p-3 rounded">{storyData?.world_description}</p>
+                </div>
+              </div>
+
               <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
                 <label className="text-sm font-bold text-gray-400">Tên Truyện</label>
                 <input 

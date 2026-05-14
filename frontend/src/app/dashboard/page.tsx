@@ -272,6 +272,7 @@ export default function DashboardPage() {
           initialTitle={settingsStory.title}
           initialCoverImage={settingsStory.cover_image}
           characterData={settingsStory.character}
+          storyData={settingsStory}
           onSettingsUpdated={() => {
             setSettingsStory(null);
             fetchStories();
