@@ -1,10 +1,17 @@
 # Nexus Tale: AI-Powered Interactive RPG Storyteller
 
-An advanced, full-stack Interactive Fiction RPG engine powered by a multi-agent LLM architecture. Nexus Tale allows players to create customized worlds, characters, and dynamically shape their own stories through natural language and RPG choices.
+An advanced, full-stack Interactive Fiction RPG engine powered by a multi-agent LLM architecture. Nexus Tale allows players to create customized worlds, characters, and dynamically shape their own stories through natural language and RPG choices. Built for multiple users with a premium cyberpunk aesthetic.
 
 ![Hero Banner](frontend/public/images/herosection.png)
 
 ## 🌟 Key Features
+
+### 🔐 Premium Identity & Multi-User System
+- **Secure Authentication:** JWT-based multi-user authentication with bcrypt password hashing.
+- **Session Management:** Robust frontend state persistence using Zustand, seamlessly integrated with Axios interceptors for automated token injection.
+- **Cyberpunk Portal:** A highly polished, multi-variant background split-screen interface with sleek dark-mode aesthetics and micro-animations.
+- **Route Protection (AuthGuard):** Global security layer that intercepts unauthorized access and triggers verifying animations.
+- **Admin Telemetry Dashboard:** Real-time system statistics, MongoDB database overview, and user management portal for system administrators.
 
 ### 🧠 Multi-Agent AI Pipeline
 The backend utilizes LangGraph to orchestrate a sophisticated team of AI agents for every turn:
@@ -21,7 +28,8 @@ The backend utilizes LangGraph to orchestrate a sophisticated team of AI agents 
 
 ### 🎨 Premium "Soft UI" Frontend
 - Built with **Next.js 14**, React, and **Framer Motion**.
-- Stunning glassmorphism design, dark mode, smooth page transitions, and micro-animations.
+- Stunning minimalist dark-mode design, smooth page transitions, and subtle hover effects.
+- **Personal Dashboard:** A centralized hub to manage, resume, or delete your active story instances.
 - **Scroll-spy Navigation & Reading Modes:** Toggle between seamless continuous scrolling or single-chapter book views with a fully functional Table of Contents teleportation system.
 - **Interactive Hologram Avatars:** Dynamic SVG avatars that reflect the character's core aesthetic.
 - **Real-time Map & Radar Charts:** Visual representations of character stats and relationships using Recharts.
@@ -30,9 +38,9 @@ The backend utilizes LangGraph to orchestrate a sophisticated team of AI agents 
 
 ## 🏗️ Architecture Stack
 
-- **Frontend:** Next.js 14, React, TypeScript, Framer Motion, Recharts, Lucide Icons.
-- **Backend:** Python 3.11, FastAPI, LangGraph, LangChain, Pydantic.
-- **Database:** MongoDB (Persistent RPG State & Configs).
+- **Frontend:** Next.js 14, React, TypeScript, Zustand (State), Framer Motion, Recharts, TailwindCSS.
+- **Backend:** Python 3.11, FastAPI, LangGraph, LangChain, Pydantic, PyJWT, passlib (bcrypt).
+- **Database:** MongoDB (Persistent User & RPG State).
 - **Vector Search:** Qdrant (Long-term story memory & context retrieval).
 - **Models Supported:** Google Gemini, Anthropic Claude, Groq Llama 3, OpenAI GPT-4.
 
@@ -109,13 +117,14 @@ Open `http://localhost:3000` in your browser.
 
 ## 📖 How to Play
 
-1. **World Creation:** On the homepage, select a genre (Cyberpunk, Wuxia, Horror, etc.) or write your own world description. Enter your character's name and backstory.
-2. **Pre-game Customization:** The "World Builder" AI will generate traits, abilities, shop items, and factions based on your prompt. Customize your starting loadout.
-3. **Gameplay:** 
+1. **Authentication:** Create an account or login through the secure Identity Portal.
+2. **World Creation:** On the homepage or Dashboard, select a genre (Cyberpunk, Wuxia, Horror, etc.) or write your own world description. Enter your character's name and backstory.
+3. **Pre-game Customization:** The "World Builder" AI will generate traits, abilities, shop items, and factions based on your prompt. Customize your starting loadout.
+4. **Gameplay:** 
    - Read the generated chapters.
    - Choose one of the 3 AI-generated choices, OR type your own custom action in the terminal at the bottom.
    - Use the HUD on the left and right to track your inventory, stress levels, map location, and faction standings.
-4. **Navigation:** Use the dropdown in the top sticky header to quickly teleport to previous chapters.
+5. **Dashboard Management:** Return to your `/dashboard` at any time to manage or resume multiple stories.
 
 ---
 
