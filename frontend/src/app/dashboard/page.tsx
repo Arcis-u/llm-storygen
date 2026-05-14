@@ -3,10 +3,11 @@
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
-import { BookOpen, Plus, Play, Trash2, Clock, Globe, Shield, Loader2, Sparkles, AlertTriangle } from "lucide-react";
+import { BookOpen, Plus, Play, Trash2, Clock, Globe, Shield, Loader2, Sparkles, AlertTriangle, Settings } from "lucide-react";
 import { getMyStories, deleteStory } from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
 import Link from "next/link";
+import StorySettingsModal from "@/components/StorySettingsModal";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -14,6 +15,7 @@ export default function DashboardPage() {
   const [stories, setStories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [settingsStory, setSettingsStory] = useState<any | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -152,11 +154,27 @@ export default function DashboardPage() {
             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
           >
             {stories.map((story) => (
-              <motion.div 
+              <motion.div
                 key={story.story_id}
-                variants={cardVariants}
-                className="group relative bg-[#0a0a0f] rounded-2xl border border-white/5 overflow-hidden transition-all hover:border-cyan-500/30 hover:shadow-[0_10px_40px_-10px_rgba(0,245,212,0.2)]"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                whileHover={{ y: -5 }}
+                className="group relative bg-[#0a0a0f] border border-white/5 rounded-2xl overflow-hidden hover:border-cyan-500/50 hover:shadow-[0_0_30px_rgba(0,255,255,0.1)] transition-all duration-300"
               >
+                {/* Background rendering for cover_image */}
+                {story.cover_image && (
+                  <div 
+                    className="absolute inset-0 z-0 opacity-30 group-hover:opacity-50 transition-opacity duration-500"
+                    style={{
+                      backgroundImage: `url(${story.cover_image})`,
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center',
+                    }}
+                  />
+                )}
+                {/* Dark gradient overlay so text remains readable */}
+                <div className="absolute inset-0 z-0 bg-gradient-to-t from-[#0a0a0f] via-[#0a0a0f]/90 to-transparent pointer-events-none" />
+
                 {/* Status indicator */}
                 <div className="absolute top-4 right-4 z-20 flex gap-2">
                   {story.is_god_mode && (
@@ -176,12 +194,13 @@ export default function DashboardPage() {
                 </div>
 
                 {/* Card Content */}
-                <div className="p-6">
+                <div className="p-6 relative z-10 flex flex-col h-full">
                   <h3 className="text-xl font-bold mb-1 truncate pr-20 group-hover:text-cyan-300 transition-colors">
                     {story.title}
                   </h3>
                   <div className="text-sm text-cyan-500 mb-4 capitalize font-medium">
                     {story.genre.replace("_", " ")}
+
                   </div>
                   
                   <div className="space-y-3 mb-6">
@@ -214,18 +233,25 @@ export default function DashboardPage() {
                   )}
 
                   {/* Actions */}
-                  <div className="flex gap-3">
+                  <div className="flex gap-3 relative z-10">
                     <button 
                       onClick={() => router.push(`/play?id=${story.story_id}`)}
-                      className="flex-1 flex items-center justify-center gap-2 py-3 bg-white/10 hover:bg-cyan-500 hover:text-black rounded-xl font-bold transition-all text-sm"
+                      className="flex-1 flex items-center justify-center gap-2 py-3 bg-white/10 hover:bg-cyan-500 hover:text-black rounded-xl font-bold transition-all text-sm backdrop-blur-sm"
                     >
                       <Play size={16} fill="currentColor" />
                       {story.is_ended ? "REVIEW" : "RESUME"}
                     </button>
                     <button 
+                      onClick={() => setSettingsStory(story)}
+                      className="p-3 bg-white/5 hover:bg-white/20 text-white rounded-xl border border-white/10 transition-all backdrop-blur-sm"
+                      title="Settings & Info"
+                    >
+                      <Settings size={18} />
+                    </button>
+                    <button 
                       onClick={() => handleDelete(story.story_id)}
                       disabled={deletingId === story.story_id}
-                      className="p-3 bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white rounded-xl border border-red-500/20 transition-all disabled:opacity-50"
+                      className="p-3 bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white rounded-xl border border-red-500/20 transition-all disabled:opacity-50 backdrop-blur-sm"
                       title="Delete Story"
                     >
                       {deletingId === story.story_id ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18} />}
@@ -237,6 +263,21 @@ export default function DashboardPage() {
           </motion.div>
         )}
       </main>
+
+      {settingsStory && (
+        <StorySettingsModal 
+          isOpen={!!settingsStory}
+          onClose={() => setSettingsStory(null)}
+          storyId={settingsStory.story_id}
+          initialTitle={settingsStory.title}
+          initialCoverImage={settingsStory.cover_image}
+          characterData={settingsStory.character}
+          onSettingsUpdated={() => {
+            setSettingsStory(null);
+            fetchStories();
+          }}
+        />
+      )}
     </div>
   );
 }

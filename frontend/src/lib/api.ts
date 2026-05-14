@@ -64,17 +64,45 @@ export async function customizeStory(data: {
   return response.data;
 }
 
-// --- Gameplay Turn ---
+// --- Gameplay Turn (Narrative Only) ---
 export async function submitAction(data: {
   story_id: string;
-  action_type: 'choice' | 'custom' | 'move' | 'buy_item' | 'join_faction';
+  action_type: 'choice' | 'custom' | 'move';
   choice_id?: number;
   custom_action?: string;
   target_location_id?: string;
-  item_id?: string;
-  org_id?: string;
 }) {
   const response = await api.post('/api/story/turn', data);
+  return response.data;
+}
+
+// --- Instant Actions (System UI, No AI) ---
+export async function submitInstantAction(data: {
+  story_id: string;
+  action_type: string;
+  item_id?: string;
+}) {
+  const response = await api.post('/api/story/action/instant', data);
+  return response.data;
+}
+
+// --- Intent Actions (Psychology, Delayed AI) ---
+export async function submitIntent(data: {
+  story_id: string;
+  intent_type: string;
+  target_name: string;
+  target_id?: string;
+}) {
+  const response = await api.post('/api/story/action/intent', data);
+  return response.data;
+}
+
+// --- Story Settings ---
+export async function updateStorySettings(storyId: string, data: {
+  title?: string;
+  cover_image?: string;
+}) {
+  const response = await api.put(`/api/story/${storyId}/settings`, data);
   return response.data;
 }
 

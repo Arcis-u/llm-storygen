@@ -12,6 +12,25 @@ from enum import Enum
 
 
 # ============================================================
+# API Request Models
+# ============================================================
+
+class StorySettingsUpdate(BaseModel):
+    title: Optional[str] = None
+    cover_image: Optional[str] = None
+
+class InstantActionRequest(BaseModel):
+    story_id: str
+    action_type: str = Field(description="e.g., 'buy_item', 'equip_item'")
+    item_id: Optional[str] = None
+
+class IntentActionRequest(BaseModel):
+    story_id: str
+    intent_type: str = Field(description="e.g., 'investigate', 'join_faction'")
+    target_name: str
+    target_id: Optional[str] = None
+
+# ============================================================
 # Enums
 # ============================================================
 
@@ -295,6 +314,7 @@ class StoryConfig(BaseModel):
     story_id: str = Field(default="")
     user_id: str = Field(default="anonymous")
     title: str = Field(default="Untitled Story")
+    cover_image: Optional[str] = Field(default=None, description="URL to an external image used as the story cover")
     genre: str = Field(default="Fantasy")
     world_description: str = Field(default="")
     tone: str = Field(default="dark, immersive, detailed")

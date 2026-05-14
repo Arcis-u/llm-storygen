@@ -153,6 +153,9 @@ Currencies: {currencies}
 Active Quests: {quests_summary}
 Abilities: {abilities_summary}
 
+# PSYCHOLOGICAL INTENTS (Desires/Goals)
+{desires}
+
 # RECENT MEMORIES (Last 3 chapters summaries)
 {recent_summaries}
 
@@ -172,6 +175,7 @@ Return a detailed plan as a JSON object with:
 # RULES FOR PLAN
 - BẮT BUỘC: Kế hoạch (director_plan) phải được viết bằng TIẾNG VIỆT 100%.
 - LƯU Ý QUAN TRỌNG VỀ GAME MECHANICS: Đừng ra lệnh cho Writer xuất thông báo kiểu "[CÓ/KHÔNG]" hoặc "Bạn bị trừ 50 Gold". Nếu hệ thống truyện (như Cyberpunk/LitRPG) có cơ chế giao diện cho nhân vật, hãy miêu tả nó như một phần của câu chuyện (vd: "Một dòng chữ đỏ hiện lên trên kính võng mạc"). Truyện là thuần tương tác tiểu thuyết.
+- XỬ LÝ TÂM LÝ (PSYCHOLOGICAL INTENTS): Nếu nhân vật có Intent (ví dụ "Muốn tìm hiểu tổ chức Bóng Tối"), bạn BẮT BUỘC phải tích hợp ý định này vào kế hoạch một cách CHẬM RÃI, THỰC TẾ và TỰ NHIÊN dựa vào bối cảnh hiện tại. TUYỆT ĐỐI KHÔNG DỊCH CHUYỂN (teleport) nhân vật. Hãy ra lệnh cho Writer miêu tả cảnh nhân vật dò la tin tức, tra cứu mạng lưới, hoặc âm thầm quan sát, lồng ghép song song với hành động chính mà người chơi vừa chọn.
 """
 
 
@@ -233,6 +237,9 @@ async def director_node(state: GraphState) -> GraphState:
     abilities_summary = ", ".join([f"{a['name']} (Lv.{a.get('power_level', 1)})" for a in abilities]) or "None"
 
     # ─── 5. Build System Prompt ───
+    desires_list = char.get("psychology", {}).get("desires", [])
+    desires_summary = "\n".join([f"- {d}" for d in desires_list]) if desires_list else "Không có ý định đặc biệt nào."
+
     system_prompt = DIRECTOR_SYSTEM.format(
         genre=config.get("genre", "Fantasy"),
         tone=config.get("tone", "dark, immersive"),
@@ -243,6 +250,7 @@ async def director_node(state: GraphState) -> GraphState:
         currencies=json.dumps(char.get("economy", {}).get("currencies", {}), ensure_ascii=False),
         quests_summary=quests_summary,
         abilities_summary=abilities_summary,
+        desires=desires_summary,
         recent_summaries=recent_summaries,
         plot_trigger_instructions=trigger_instructions or "No triggers pending.",
         ability_enforcement=ability_enforcement or "No ability constraints triggered.",

@@ -24,7 +24,7 @@ import {
   Backpack,
 } from "lucide-react";
 import { useStoryStore, ChapterContent } from "@/store/useStoryStore";
-import { submitAction, getStoryState } from "@/lib/api";
+import { submitAction, submitInstantAction, submitIntent, getStoryState } from "@/lib/api";
 
 import CityMap from "@/components/CityMap";
 import RelationshipGraph from "@/components/RelationshipGraph";
@@ -1078,13 +1078,42 @@ function PlayContent() {
 
   const handleCustomAction = async (action_type: "move" | "buy_item" | "join_faction", target_id: string) => {
     if (!storyId || isLoading || isProcessing) return;
+    
+    // --- System Actions (Instant) ---
+    if (action_type === "buy_item") {
+      try {
+        const result = await submitInstantAction({ story_id: storyId, action_type, item_id: target_id });
+        useStoryStore.getState().updateEconomy(result.economy);
+        alert(result.message);
+      } catch (err) {
+        console.error(err);
+        alert("Thiếu quỹ hoặc vật phẩm không tồn tại.");
+      }
+      return;
+    }
+
+    // --- Intent Actions (Psychology) ---
+    if (action_type === "join_faction") {
+      try {
+        const org = worldOrganizations.find(o => o.org_id === target_id);
+        const target_name = org ? org.name : target_id;
+        const result = await submitIntent({ story_id: storyId, intent_type: "join_faction", target_name, target_id });
+        useStoryStore.getState().addDesire(result.message.replace("Added intent: ", ""));
+        alert("Đã lưu ý định! Cốt truyện sẽ tự động diễn biến theo hướng này.");
+      } catch (err) {
+        console.error(err);
+        alert("Lỗi khi ghi nhận ý định.");
+      }
+      return;
+    }
+
+    // --- Narrative Actions (Move) ---
     setLoading(true);
     setIsProcessing(true);
     
     // Smooth UX: Switch back to story tab immediately so user sees the loading state
     setMainTab("story");
     
-    // Optional: Scroll to bottom of story so loading terminal is visible
     setTimeout(() => {
       window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
     }, 100);
@@ -1093,17 +1122,8 @@ function PlayContent() {
       const payload: Record<string, unknown> = {
         story_id: storyId,
         action_type,
+        target_location_id: target_id,
       };
-      // Map target_id to the correct backend field
-      if (action_type === "buy_item") {
-        payload.item_id = target_id;
-      } else if (action_type === "move") {
-        payload.target_location_id = target_id;
-      } else if (action_type === "join_faction") {
-        payload.org_id = target_id;
-      } else {
-        payload.custom_action = target_id;
-      }
       const result = await submitAction(payload as Parameters<typeof submitAction>[0]);
       updateFullState(result);
       setIsProcessing(false);

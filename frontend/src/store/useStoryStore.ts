@@ -219,6 +219,9 @@ interface StoryStore {
   setWorldOrganizations: (orgs: Organization[]) => void;
   setMarketItems: (items: ShopItem[]) => void;
   
+  updateEconomy: (economy: CharacterEconomy) => void;
+  addDesire: (intent: string) => void;
+
   updateFullState: (data: {
     chapter: ChapterContent;
     character: CharacterState;
@@ -270,6 +273,16 @@ export const useStoryStore = create<StoryStore>((set) => ({
   setIsProcessing: (processing) => set({ isProcessing: processing }),
   setError: (error) => set({ error }),
   setCharacter: (character) => set({ character }),
+  updateEconomy: (economy) => set((state) => ({ character: { ...state.character, economy } })),
+  addDesire: (intent) => set((state) => ({ 
+    character: { 
+      ...state.character, 
+      psychology: { 
+        ...state.character.psychology, 
+        desires: [...state.character.psychology.desires, intent] 
+      } 
+    } 
+  })),
 
   addChapter: (chapter) =>
     set((state) => ({

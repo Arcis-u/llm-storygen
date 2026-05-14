@@ -29,6 +29,9 @@ from app.models.schemas import (
     SearchFactionRequest,
     Organization,
     NPCRelationship,
+    StorySettingsUpdate,
+    InstantActionRequest,
+    IntentActionRequest,
 )
 
 router = APIRouter(prefix="/api/story", tags=["story"])
@@ -770,6 +773,106 @@ async def search_faction(request: SearchFactionRequest):
 
 
 # ============================================================
+# PUT /{story_id}/settings — Update story metadata
+# ============================================================
+@router.put("/{story_id}/settings")
+async def update_story_settings(story_id: str, request: StorySettingsUpdate, user: dict = Depends(get_current_user)):
+    db = await get_mongo_db()
+    
+    update_data = {}
+    if request.title is not None:
+        update_data["title"] = request.title
+    if request.cover_image is not None:
+        update_data["cover_image"] = request.cover_image
+        
+    if not update_data:
+        return {"status": "success"}
+        
+    result = await db.stories.update_one(
+        {"story_id": story_id, "user_id": user["user_id"]},
+        {"$set": update_data}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Story not found or unauthorized")
+        
+    return {"status": "success", "message": "Settings updated"}
+
+# ============================================================
+# POST /action/instant — UI/System Actions (No AI)
+# ============================================================
+@router.post("/action/instant")
+async def process_instant_action(request: InstantActionRequest, user: dict = Depends(get_current_user)):
+    db = await get_mongo_db()
+    story = await db.stories.find_one({"story_id": request.story_id, "user_id": user["user_id"]})
+    if not story:
+        raise HTTPException(status_code=404, detail="Story not found")
+        
+    config = StoryConfig(**story)
+    
+    if request.action_type == "buy_item":
+        item_id = request.item_id
+        shop_item = next((i for i in config.available_shop_items if i.item_id == item_id), None)
+        if not shop_item:
+            raise HTTPException(status_code=404, detail="Item not found")
+            
+        currency = shop_item.currency_type or "Gold"
+        balance = config.character.economy.currencies.get(currency, 0.0)
+        
+        if balance < shop_item.price:
+            raise HTTPException(status_code=400, detail="Insufficient funds")
+            
+        # Deduct money and add item
+        config.character.economy.currencies[currency] -= shop_item.price
+        
+        # Check if item exists in inventory
+        existing = next((i for i in config.character.economy.inventory if i.item_id == item_id), None)
+        if existing:
+            existing.quantity += 1
+        else:
+            from app.models.schemas import InventoryItem
+            config.character.economy.inventory.append(
+                InventoryItem(item_id=item_id, name=shop_item.name, quantity=1)
+            )
+            
+        await db.stories.update_one(
+            {"story_id": request.story_id},
+            {"$set": {"character.economy": config.character.economy.model_dump()}}
+        )
+        return {"status": "success", "message": f"Bought {shop_item.name}", "economy": config.character.economy.model_dump()}
+    
+    return {"status": "error", "message": "Unknown action type"}
+
+# ============================================================
+# POST /action/intent — Add Intent to Psychology
+# ============================================================
+@router.post("/action/intent")
+async def add_character_intent(request: IntentActionRequest, user: dict = Depends(get_current_user)):
+    db = await get_mongo_db()
+    story = await db.stories.find_one({"story_id": request.story_id, "user_id": user["user_id"]})
+    if not story:
+        raise HTTPException(status_code=404, detail="Story not found")
+        
+    config = StoryConfig(**story)
+    
+    intent_msg = ""
+    if request.intent_type == "join_faction":
+        intent_msg = f"Đang nung nấu ý định tìm cách gia nhập tổ chức '{request.target_name}'."
+    elif request.intent_type == "investigate":
+        intent_msg = f"Muốn bí mật thu thập thông tin và tìm hiểu về '{request.target_name}'."
+    else:
+        intent_msg = f"Muốn {request.intent_type} {request.target_name}."
+        
+    if intent_msg not in config.character.psychology.desires:
+        config.character.psychology.desires.append(intent_msg)
+        
+    await db.stories.update_one(
+        {"story_id": request.story_id},
+        {"$set": {"character.psychology.desires": config.character.psychology.desires}}
+    )
+    return {"status": "success", "message": f"Added intent: {intent_msg}"}
+
+
+# ============================================================
 # GET /user/me — List all stories for authenticated user
 # ============================================================
 @router.get("/user/me")
@@ -785,6 +888,7 @@ async def list_my_stories(user: dict = Depends(get_current_user)):
             "_id": 0,
             "story_id": 1,
             "title": 1,
+            "cover_image": 1,
             "genre": 1,
             "world_description": 1,
             "tone": 1,
