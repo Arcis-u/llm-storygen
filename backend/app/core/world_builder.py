@@ -41,6 +41,8 @@ async def generate_world_and_character(genre: str, world_description: str, chara
     BẠN LÀ GAME MASTER. BẠN PHẢI SÁNG TẠO DỮ LIỆU THẬT, CHI TIẾT VÀ BÁM SÁT TIỂU SỬ. 
     KHÔNG ĐƯỢC COPY NGUYÊN XI CÁC CHỮ MẪU NHƯ "Tên địa điểm 1" HAY "Kỹ năng 1".
     TUYỆT ĐỐI KHÔNG ĐƯỢC ĐỂ TRỐNG BẤT KỲ MẢNG NÀO (Mọi array đều phải có dữ liệu bên trong).
+    - Tạo một bản tóm tắt siêu hấp dẫn (dài 1-2 đoạn) dựa trên Mô tả thế giới ngắn gọn của người chơi (`generated_world_description`).
+    - Viết lại một tiểu sử nhân vật hoành tráng và chi tiết (dài 1-2 đoạn) dựa trên ý tưởng của người chơi (`generated_backstory`).
     - Tạo 4-5 địa điểm (locations) cực kỳ chi tiết, nối với nhau hợp lý.
     - Tạo 2-3 thế lực (organizations) nguy hiểm/bí ẩn.
     - Tạo 4-5 vật phẩm (shop_items) độc đáo.
@@ -51,6 +53,8 @@ async def generate_world_and_character(genre: str, world_description: str, chara
     - Tạo 2-4 NPC ban đầu (initial_npcs) có quan hệ sâu sắc.
 
     {{
+        "generated_world_description": "Mô tả thế giới cực kỳ chi tiết, hấp dẫn...",
+        "generated_backstory": "Tiểu sử nhân vật được viết lại một cách lôi cuốn...",
         "locations": [
             {{"location_id": "loc_1", "name": "Tên địa điểm 1", "description": "Mô tả chi tiết", "function": "Chức năng (VD: Nghỉ ngơi)", "benefits": "Lợi ích", "risks": "Rủi ro", "is_current": true, "x_position": 50, "y_position": 50, "connected_to": ["loc_2"]}}
         ],

@@ -91,6 +91,10 @@ async def create_story(request: CreateStoryRequest, user: Optional[dict] = Depen
         character_name=request.character_name,
         backstory=request.character_backstory or "Bí ẩn"
     )
+
+    # --- Override simple prompt with AI-generated rich descriptions ---
+    story_config.world_description = world_data.get("generated_world_description", request.world_description)
+    story_config.character.backstory = world_data.get("generated_backstory", request.character_backstory)
     
     # --- Locations ---
     valid_locations = []
