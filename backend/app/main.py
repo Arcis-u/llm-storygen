@@ -22,6 +22,8 @@ from app.core.database import init_databases, close_databases
 from app.api.story import router as story_router
 from app.api.system import router as system_router
 from app.api.analytics import router as analytics_router
+from app.api.auth import router as auth_router, init_admin
+from app.api.admin import router as admin_router
 
 
 @asynccontextmanager
@@ -35,6 +37,7 @@ async def lifespan(app: FastAPI):
     print("  Interactive Story AI - Starting up...")
     print("=" * 60)
     await init_databases()
+    await init_admin()
     yield
     await close_databases()
     print("  Interactive Story AI - Shut down complete.")
@@ -89,9 +92,11 @@ async def add_telemetry(request: Request, call_next):
             TRAFFIC_LOG.append(log_entry)
 
 # --- Mount Routers ---
+app.include_router(auth_router)
 app.include_router(story_router)
 app.include_router(system_router)
 app.include_router(analytics_router)
+app.include_router(admin_router)
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):

@@ -9,7 +9,6 @@ import {
   Globe,
   User,
   Palette,
-  Scroll,
   Loader2,
   Settings,
   Shield,
@@ -18,6 +17,7 @@ import {
   Check,
 } from "lucide-react";
 import { useStoryStore } from "@/store/useStoryStore";
+import { useAuthStore } from "@/store/authStore";
 import { createStory } from "@/lib/api";
 
 const GENRES = [
@@ -32,6 +32,13 @@ const GENRES = [
 export default function CreatePage() {
   const router = useRouter();
   const { setStoryId, setPhase } = useStoryStore();
+  const { isAuthenticated, user } = useAuthStore();
+
+  useEffect(() => {
+    if (!isAuthenticated()) {
+      router.push("/login");
+    }
+  }, [isAuthenticated, router]);
 
   const [step, setStep] = useState(0);
   const [genre, setGenre] = useState("");

@@ -4,9 +4,12 @@ Handles: creation (with World Builder), customization, gameplay turns (with API 
 pre-processing logic for buy/move/join, State Merger integration), and state retrieval.
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from datetime import datetime
+from typing import Optional
 import uuid
+
+from app.core.security import get_current_user_optional, get_current_user
 import asyncio
 
 from app.core.database import get_mongo_db, save_story_memory
@@ -38,7 +41,7 @@ _active_locks: set[str] = set()
 # POST /create — World Builder
 # ============================================================
 @router.post("/create")
-async def create_story(request: CreateStoryRequest):
+async def create_story(request: CreateStoryRequest, user: Optional[dict] = Depends(get_current_user_optional)):
     """
     Phase 1: Create a new story from the user's initial prompt.
     In Phase 5, the World Builder Agent will auto-generate locations, factions, and shop items.
@@ -48,14 +51,23 @@ async def create_story(request: CreateStoryRequest):
     story_id = str(uuid.uuid4())
 
     # Build initial story config with sensible defaults
+    # Determine user_id from auth token or fallback to anonymous
+    user_id = user["user_id"] if user else "anonymous"
+
+    # Enforce God Mode for Admin only
+    is_god_mode = request.is_god_mode
+    if is_god_mode and (not user or user.get("role") != "admin"):
+        is_god_mode = False
+
     story_config = StoryConfig(
         story_id=story_id,
+        user_id=user_id,
         title=f"Story: {request.character_name}",
         genre=request.genre,
         world_description=request.world_description,
         tone=request.tone,
         nsfw_enabled=request.nsfw_enabled,
-        is_god_mode=request.is_god_mode,
+        is_god_mode=is_god_mode,
         character=CharacterState(
             name=request.character_name,
             backstory=request.character_backstory,
@@ -755,4 +767,90 @@ async def search_faction(request: SearchFactionRequest):
     except Exception as e:
         print(f"[ERROR] Failed to parse dynamic faction JSON: {e}\nContent: {content}")
         raise HTTPException(status_code=500, detail="Failed to generate faction data. Please try again.")
+
+
+# ============================================================
+# GET /user/me — List all stories for authenticated user
+# ============================================================
+@router.get("/user/me")
+async def list_my_stories(user: dict = Depends(get_current_user)):
+    """
+    Returns a summary of all stories belonging to the authenticated user.
+    Used by the Dashboard page.
+    """
+    db = await get_mongo_db()
+    stories = await db.stories.find(
+        {"user_id": user["user_id"]},
+        {
+            "_id": 0,
+            "story_id": 1,
+            "title": 1,
+            "genre": 1,
+            "world_description": 1,
+            "tone": 1,
+            "current_chapter": 1,
+            "total_turns": 1,
+            "is_ended": 1,
+            "is_god_mode": 1,
+            "character.name": 1,
+            "character.traits": 1,
+            "character.skills": 1,
+            "character.abilities": 1,
+            "character.relationships": 1,
+            "character.economy.currencies": 1,
+            "locations": 1,
+            "available_organizations": 1,
+            "plot_triggers": 1,
+            "created_at": 1,
+            "updated_at": 1,
+        }
+    ).sort("created_at", -1).to_list(50)
+
+    for s in stories:
+        if "created_at" in s:
+            s["created_at"] = str(s["created_at"])
+        if "updated_at" in s:
+            s["updated_at"] = str(s["updated_at"])
+
+    return {"stories": stories}
+
+
+# ============================================================
+# DELETE /{story_id} — Delete a story
+# ============================================================
+@router.delete("/{story_id}")
+async def delete_story(story_id: str, user: dict = Depends(get_current_user)):
+    """
+    Delete a story and all its chapters. 
+    Admin can delete any story; regular users can only delete their own.
+    """
+    db = await get_mongo_db()
+    story = await db.stories.find_one({"story_id": story_id})
+    if not story:
+        raise HTTPException(status_code=404, detail="Story not found")
+
+    # Ownership check (admin bypasses)
+    if user.get("role") != "admin" and story.get("user_id") != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Not your story")
+
+    await db.chapters.delete_many({"story_id": story_id})
+    await db.stories.delete_one({"story_id": story_id})
+
+    # Also clean Qdrant vectors for this story
+    try:
+        from app.core.database import get_qdrant
+        from app.core.config import get_settings
+        from qdrant_client.models import Filter, FieldCondition, MatchValue
+        settings = get_settings()
+        qdrant = get_qdrant()
+        qdrant.delete(
+            collection_name=settings.qdrant_collection_name,
+            points_selector=Filter(
+                must=[FieldCondition(key="story_id", match=MatchValue(value=story_id))]
+            ),
+        )
+    except Exception as e:
+        print(f"[WARN] Failed to clean Qdrant vectors for {story_id}: {e}")
+
+    return {"deleted": True, "story_id": story_id}
 

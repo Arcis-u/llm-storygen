@@ -5,6 +5,8 @@
 
 import axios from 'axios';
 
+import { useAuthStore } from '../store/authStore';
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 const api = axios.create({
@@ -12,6 +14,27 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
   timeout: 600000, // 10 minutes - pipeline runs 4 LLM agents sequentially with heavy models
 });
+
+// Request Interceptor: Attach token
+api.interceptors.request.use((config) => {
+  const token = useAuthStore.getState().token;
+  if (token && config.headers) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// Response Interceptor: Handle 401
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      // Clear token and logout if token is invalid/expired
+      useAuthStore.getState().logout();
+    }
+    return Promise.reject(error);
+  }
+);
 
 // --- Story Creation ---
 export async function createStory(data: {
@@ -58,6 +81,48 @@ export async function submitAction(data: {
 // --- Start Story (Generate Opening Chapter) ---
 export async function startStory(storyId: string) {
   const response = await api.post(`/api/story/start/${storyId}`);
+  return response.data;
+}
+
+export async function deleteStory(storyId: string) {
+  const response = await api.delete(`/api/story/${storyId}`);
+  return response.data;
+}
+
+// --- Auth ---
+export async function login(data: any) {
+  const response = await api.post('/api/auth/login', data);
+  return response.data;
+}
+
+export async function register(data: any) {
+  const response = await api.post('/api/auth/register', data);
+  return response.data;
+}
+
+export async function getMe() {
+  const response = await api.get('/api/auth/me');
+  return response.data;
+}
+
+export async function getMyStories() {
+  const response = await api.get('/api/story/user/me');
+  return response.data;
+}
+
+// --- Admin ---
+export async function getAdminStats() {
+  const response = await api.get('/api/admin/stats');
+  return response.data;
+}
+
+export async function getAdminUsers() {
+  const response = await api.get('/api/admin/users');
+  return response.data;
+}
+
+export async function deleteUser(userId: string) {
+  const response = await api.delete(`/api/admin/users/${userId}`);
   return response.data;
 }
 

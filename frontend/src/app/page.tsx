@@ -64,10 +64,13 @@ const TerminalSim = () => {
   );
 };
 
+import { useAuthStore } from "@/store/authStore";
+
 // ============================================================
 // MAIN PAGE
 // ============================================================
 export default function HomePage() {
+  const { isAuthenticated, user, logout } = useAuthStore();
   
   // Spotlight effect hook
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -93,6 +96,57 @@ export default function HomePage() {
         backgroundColor: "#05050A",
       }}
     >
+      {/* --- PREMIUM HEADER --- */}
+      <motion.header
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.8, ease: "easeOut" }}
+        className="fixed top-0 left-0 w-full z-50 px-8 py-6 flex justify-between items-center pointer-events-none"
+      >
+        <div className="flex items-center gap-4 pointer-events-auto">
+          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500 to-purple-600 shadow-[0_0_30px_rgba(0,245,212,0.5)] flex items-center justify-center border border-white/20">
+            <span className="text-black font-black text-lg tracking-tighter">NX</span>
+          </div>
+          <div className="flex flex-col">
+            <span className="font-black tracking-[0.3em] text-lg text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.8)]">NEXUS</span>
+            <span className="font-mono text-[10px] text-cyan-400 tracking-widest uppercase">Central Core // Online</span>
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-4 pointer-events-auto">
+          {isAuthenticated() ? (
+            <div className="flex items-center gap-3 bg-[#0a0a0f]/80 backdrop-blur-xl p-2 rounded-2xl border border-white/10 shadow-[0_20px_40px_-10px_rgba(0,0,0,0.5)]">
+              <div className="px-4 py-2 flex flex-col items-end border-r border-white/10">
+                <span className="text-xs text-white/50 font-medium">Identity Confirmed</span>
+                <span className="text-sm font-bold text-cyan-400">{user?.username}</span>
+              </div>
+              <Link href="/dashboard">
+                <button className="px-6 py-3 text-sm font-black text-black bg-cyan-400 hover:bg-white rounded-xl shadow-[0_0_20px_rgba(0,245,212,0.4)] transition-all transform hover:scale-105">
+                  DASHBOARD
+                </button>
+              </Link>
+              <button 
+                onClick={logout}
+                className="px-4 py-3 text-xs font-bold text-white/40 hover:text-red-400 hover:bg-red-400/10 rounded-xl transition-all"
+              >
+                LOGOUT
+              </button>
+            </div>
+          ) : (
+            <Link href="/login">
+              <button className="group relative overflow-hidden px-8 py-4 bg-[#0a0a0f]/80 backdrop-blur-xl rounded-2xl border border-cyan-500/30 hover:border-cyan-400 shadow-[0_0_30px_rgba(0,245,212,0.15)] hover:shadow-[0_0_40px_rgba(0,245,212,0.4)] transition-all transform hover:-translate-y-1">
+                <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/20 to-purple-500/20 translate-y-[100%] group-hover:translate-y-0 transition-transform duration-300" />
+                <div className="relative flex items-center gap-3">
+                  <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+                  <span className="font-black tracking-[0.2em] text-sm text-white group-hover:text-cyan-50">
+                    AUTHENTICATE
+                  </span>
+                </div>
+              </button>
+            </Link>
+          )}
+        </div>
+      </motion.header>
       {/* --- PREMIUM NOISE OVERLAY --- */}
       <div className="noise-overlay" style={{ zIndex: 999 }} />
 

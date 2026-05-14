@@ -23,8 +23,10 @@ class Settings(BaseSettings):
     qdrant_api_key: str = Field(default="")
     qdrant_collection_name: str = Field(default="story_memory")
     
-    # --- Admin Dashboard ---
+    # --- Auth & Admin ---
     admin_password: str = Field(default="secret_admin_123")
+    jwt_secret_key: str = Field(default="CHANGE_ME_super_secret_jwt_key_2024")
+    jwt_expire_minutes: int = Field(default=10080)  # 7 days
 
     # --- LLM API Keys ---
     openai_api_key: str = Field(default="")

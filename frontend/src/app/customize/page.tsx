@@ -3,6 +3,8 @@
 import { useState, useEffect, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter, useSearchParams } from "next/navigation";
+import { getStoryState, customizeStory, startStory } from "@/lib/api";
+import { useAuthStore } from "@/store/authStore";
 import {
   Zap,
   Plus,
@@ -20,7 +22,6 @@ import {
   Lock
 } from "lucide-react";
 import { useStoryStore, CustomTrait, SpecialAbility, CharacterSkill, PlotTrigger } from "@/store/useStoryStore";
-import { customizeStory, startStory, getStoryState } from "@/lib/api";
 import HologramAvatar from "@/components/HologramAvatar";
 import RadarChart from "@/components/RadarChart";
 

@@ -8,6 +8,8 @@ export const metadata: Metadata = {
     "Nền tảng tạo tiểu thuyết tương tác sử dụng AI Đa Tác Vụ. Nhập vai nhân vật chính, đưa ra quyết định, và định hình cốt truyện của riêng bạn.",
 };
 
+import AuthGuard from "@/components/AuthGuard";
+
 export default function RootLayout({
   children,
 }: {
@@ -34,7 +36,7 @@ export default function RootLayout({
         <div className="noise-overlay" aria-hidden="true" />
         <div className="ambient-bg" aria-hidden="true" />
         <AnalyticsHeartbeat />
-        {children}
+        <AuthGuard>{children}</AuthGuard>
       </body>
     </html>
   );

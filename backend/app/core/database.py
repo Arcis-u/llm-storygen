@@ -51,6 +51,8 @@ async def init_databases() -> None:
     await db.stories.create_index("user_id")
     await db.stories.create_index("created_at")
     await db.chapters.create_index([("story_id", 1), ("chapter_number", 1)])
+    await db.users.create_index("user_id", unique=True)
+    await db.users.create_index("username", unique=True)
 
     # --- Qdrant: Ensure vector collection exists ---
     qdrant = get_qdrant()
