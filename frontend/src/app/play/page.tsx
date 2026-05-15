@@ -23,6 +23,8 @@ import {
   Users,
   Backpack,
   Hammer,
+  Home,
+  Settings,
 } from "lucide-react";
 import { useStoryStore, ChapterContent } from "@/store/useStoryStore";
 import { submitAction, submitInstantAction, submitIntent, submitCraftAction, getStoryState, streamAction } from "@/lib/api";
@@ -197,6 +199,33 @@ function DashboardPanel() {
         height: "100%",
       }}
     >
+      {/* Top Controls */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "-0.5rem" }}>
+        <button 
+          onClick={() => window.location.href = "/dashboard"}
+          style={{ 
+            display: "flex", alignItems: "center", gap: "0.4rem", 
+            background: "transparent", border: "none", color: "var(--text-muted)", 
+            cursor: "pointer", fontSize: "0.75rem", textTransform: "uppercase",
+            fontFamily: "var(--font-mono)", padding: "0.4rem 0",
+            transition: "color 0.2s"
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.color = "var(--text-primary)"}
+          onMouseLeave={(e) => e.currentTarget.style.color = "var(--text-muted)"}
+        >
+          <Home size={14} /> Quay lại
+        </button>
+        <button 
+          style={{ 
+            background: "transparent", border: "none", color: "var(--text-muted)", 
+            cursor: "pointer", padding: "0.4rem" 
+          }}
+          title="Cài đặt (Sắp ra mắt)"
+        >
+          <Settings size={14} />
+        </button>
+      </div>
+
       <div style={{ display: "flex", alignItems: "center", gap: "1rem", position: "relative", zIndex: 2 }}>
         <div style={{ position: "relative", width: 48, height: 48, flexShrink: 0 }}>
           <div className="hud-avatar-ring" />
