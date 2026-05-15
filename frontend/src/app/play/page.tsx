@@ -22,6 +22,7 @@ import {
   Swords,
   Users,
   Backpack,
+  Hammer,
 } from "lucide-react";
 import { useStoryStore, ChapterContent } from "@/store/useStoryStore";
 import { submitAction, submitInstantAction, submitIntent, submitCraftAction, getStoryState, streamAction } from "@/lib/api";
@@ -347,25 +348,29 @@ function DashboardPanel() {
           {/* ITEMS */}
           {dashTab === "items" && (
             <div style={{ position: "relative", padding: "0.5rem", background: "rgba(0,0,0,0.2)", border: "1px solid rgba(255,255,255,0.05)", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: "0.7rem", color: "var(--text-muted)", textTransform: "uppercase" }}>Kho đồ ({character.economy.inventory.length})</span>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+                <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "1px" }}>Kho đồ ({character.economy.inventory.length})</span>
                 <button
                   onClick={() => {
                     setIsCraftingMode(!isCraftingMode);
                     setSelectedCraftItems([]);
                     import("@/lib/audio").then(({ audioEngine }) => audioEngine.playSfx("click"));
                   }}
+                  className="action-button"
                   style={{
-                    background: isCraftingMode ? "var(--accent-info)" : "transparent",
-                    border: `1px solid ${isCraftingMode ? "var(--accent-info)" : "rgba(255,255,255,0.2)"}`,
-                    color: isCraftingMode ? "#000" : "var(--text-muted)",
-                    padding: "0.2rem 0.5rem",
-                    fontSize: "0.65rem",
-                    cursor: "pointer",
-                    borderRadius: "4px"
+                    background: isCraftingMode ? "var(--accent-danger)" : "var(--accent-info)",
+                    color: "#000",
+                    padding: "0.4rem 0.8rem",
+                    fontSize: "0.7rem",
+                    fontWeight: "bold",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.4rem",
+                    boxShadow: `0 0 10px ${isCraftingMode ? "var(--accent-danger)" : "var(--accent-info)"}`
                   }}
                 >
-                  {isCraftingMode ? "HỦY CHẾ TẠO" : "CHẾ TẠO (GHÉP ĐỒ)"}
+                  <Hammer size={14} />
+                  {isCraftingMode ? "HỦY CHẾ TẠO" : "CHẾ TẠO / GHÉP"}
                 </button>
               </div>
 
@@ -567,22 +572,41 @@ function StoryPanel() {
   const prevChapterCount = useRef(chapters.length);
 
   useEffect(() => {
+    let scrolled = false;
+
     if (chapters.length > prevChapterCount.current) {
       if (latestChapter) {
         setActiveChapter(latestChapter.chapter_number);
         // Play BGM based on new chapter's tone
         audioEngine.playBGM(latestChapter.tone || "ambient");
         
-        // If in single mode, scroll to top of the new chapter
-        if (readMode === "single" && scrollRef.current) {
-          scrollRef.current.scrollTop = 0;
+        // Auto-scroll logic
+        if (scrollRef.current) {
+          if (readMode === "single") {
+            scrollRef.current.scrollTop = 0;
+            scrolled = true;
+          } else if (readMode === "continuous") {
+            // Wait for DOM to paint new chapter
+            setTimeout(() => {
+              if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+            }, 50);
+            scrolled = true;
+          }
         }
       }
     } else if (latestChapter && !activeChapter) {
       // Initial load
       setActiveChapter(latestChapter.chapter_number);
       audioEngine.playBGM(latestChapter.tone || "ambient");
+      // Scroll to bottom on initial load for continuous mode
+      if (readMode === "continuous") {
+        setTimeout(() => {
+          if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }, 100);
+        scrolled = true;
+      }
     }
+
     prevChapterCount.current = chapters.length;
   }, [chapters, latestChapter, activeChapter, readMode]);
 
@@ -619,13 +643,6 @@ function StoryPanel() {
     }, 100); // 100ms throttle
   };
 
-  useEffect(() => {
-    // Only auto-scroll to bottom if a new chapter was added
-    if (readMode === "continuous" && scrollRef.current && chapters.length > prevChapterCount.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-
-  }, [chapters, readMode]);
 
   const handleChoice = async (choiceId: number, riskLevel?: "normal" | "risky" | "crucial") => {
     if (!storyId || isBusy) return;
