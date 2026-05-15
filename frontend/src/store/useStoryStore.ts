@@ -240,6 +240,18 @@ interface StoryStore {
   resetStore: () => void;
 }
 
+const safeCharacter = (c: Partial<CharacterState>, initial: CharacterState): CharacterState => ({
+  ...initial,
+  ...c,
+  psychology: { ...initial.psychology, ...(c.psychology || {}) },
+  economy: { ...initial.economy, ...(c.economy || {}) },
+  traits: c.traits || initial.traits,
+  abilities: c.abilities || initial.abilities,
+  skills: c.skills || initial.skills,
+  relationships: c.relationships || initial.relationships,
+  factions: c.factions || initial.factions,
+});
+
 const initialCharacter: CharacterState = {
   name: '',
   backstory: '',
@@ -287,14 +299,14 @@ export const useStoryStore = create<StoryStore>((set) => ({
   setLoading: (loading) => set({ isLoading: loading }),
   setIsProcessing: (processing) => set({ isProcessing: processing }),
   setError: (error) => set({ error }),
-  setCharacter: (character) => set({ character }),
-  updateEconomy: (economy) => set((state) => ({ character: { ...state.character, economy } })),
+  setCharacter: (character) => set({ character: safeCharacter(character, initialCharacter) }),
+  updateEconomy: (economy) => set((state) => ({ character: { ...state.character, economy: { ...initialCharacter.economy, ...economy } } })),
   addDesire: (intent) => set((state) => ({ 
     character: { 
       ...state.character, 
       psychology: { 
         ...state.character.psychology, 
-        desires: [...state.character.psychology.desires, intent] 
+        desires: [...(state.character.psychology?.desires || []), intent] 
       } 
     } 
   })),
@@ -316,7 +328,7 @@ export const useStoryStore = create<StoryStore>((set) => ({
     set((state) => ({
       chapters: [...state.chapters, data.chapter],
       currentChoices: data.chapter.choices,
-      character: data.character,
+      character: safeCharacter(data.character, initialCharacter),
       quests: data.quests,
       locations: data.locations,
       worldOrganizations: (data as Record<string, unknown>).organizations as Organization[] || state.worldOrganizations,

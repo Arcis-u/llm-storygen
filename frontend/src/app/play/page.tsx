@@ -102,20 +102,20 @@ function StatBar({
   color,
 }: {
   label: string;
-  value: number;
+  value?: number;
   maxVal?: number;
   color: string;
 }) {
-  const pct = Math.min(100, Math.max(0, (value / maxVal) * 100));
-  const totalSegments = 10;
-  const activeSegments = Math.round((pct / 100) * totalSegments);
+  const safeValue = value ?? 0;
+  const safeMax = maxVal || 1;
+  const pct = Math.min(100, Math.max(0, (safeValue / safeMax) * 100));
 
   return (
     <div style={{ marginBottom: "1rem" }}>
       <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.75rem", fontWeight: 600, textTransform: "uppercase", marginBottom: "0.5rem", color: "rgba(255,255,255,0.7)", fontFamily: "'Chakra Petch', sans-serif", letterSpacing: "2px" }}>
         <span>{label}</span>
         <span className="mono-font" style={{ color: "rgba(255,255,255,0.9)", fontWeight: 400 }}>
-          {value.toFixed(0)} <span style={{ color: "rgba(255,255,255,0.3)" }}>/ {maxVal}</span>
+          {safeValue.toFixed(0)} <span style={{ color: "rgba(255,255,255,0.3)" }}>/ {maxVal}</span>
         </span>
       </div>
       <div style={{ position: "relative", height: "3px", background: "rgba(255,255,255,0.05)", borderRadius: "2px", overflow: "hidden" }}>
@@ -275,15 +275,15 @@ function DashboardPanel() {
               <div style={{ background: "rgba(255,255,255,0.02)", borderRadius: "6px", padding: "1.2rem", border: "1px solid rgba(255,255,255,0.05)" }}>
                 <StatBar label="HP" value={character.hp} maxVal={character.max_hp} color="var(--accent-danger)" />
                 <StatBar label="Năng lượng" value={character.energy} maxVal={character.max_energy} color="var(--accent-info)" />
-                <StatBar label="Stress" value={character.psychology.stress_level} maxVal={100} color="rgba(255,255,255,0.8)" />
-                {character.traits.map((t, i) => (
+                <StatBar label="Stress" value={character.psychology?.stress_level} maxVal={100} color="rgba(255,255,255,0.8)" />
+                {character.traits?.map((t, i) => (
                   <StatBar key={i} label={t.name} value={t.current_value} maxVal={t.max_value} color="rgba(255,255,255,0.5)" />
                 ))}
               </div>
 
               {/* Economy */}
               <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
-                {Object.entries(character.economy.currencies).map(([name, amount]) => (
+                {Object.entries(character.economy?.currencies || {}).map(([name, amount]) => (
                   <div
                     key={name}
                     style={{
@@ -312,7 +312,7 @@ function DashboardPanel() {
           {/* RELATIONS */}
           {dashTab === "relations" && (
             <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-              {character.relationships.length === 0 ? (
+              {!character.relationships || character.relationships.length === 0 ? (
                 <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", textAlign: "center", padding: "2rem", border: "1px dashed rgba(255,255,255,0.1)" }}>
                   NO_DATA_FOUND
                 </div>
