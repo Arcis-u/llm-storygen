@@ -27,6 +27,7 @@ SYSTEM_PROMPT = """You are the Game Master of an interactive RPG. Your job is to
 Abilities: {abilities}
 Inventory: {inventory}
 Active Quests: {quests}
+Strong Relationships (Affection >= 70): {allies}
 
 # CHOICE DESIGN PHILOSOPHY
 Each choice must feel like a genuine DILEMMA — not just "go left or right."
@@ -42,13 +43,14 @@ Each choice must feel like a genuine DILEMMA — not just "go left or right."
 
 ## Choice 3: THE WILD CARD (risk_level: "crucial")
 - Unconventional, uses a special ability or item, morally ambiguous.
+- If the player has a Strong Relationship listed above, YOU MUST make this choice about asking that NPC for help (e.g. "Nhờ vả [NPC Name]").
 - If the player has a relevant ability or item, reference it in `requires`.
 - Example: "Activate your forbidden power — but at what cost?"
 
 # RULES
 - BẮT BUỘC: Viết `title` và `description` bằng TIẾNG VIỆT 100%.
 - Descriptions should be 1-2 evocative sentences, hinting at consequences without spoiling them.
-- If a choice requires a specific item/ability the player HAS, set `requires` to its name. Otherwise, null.
+- If a choice requires a specific item/ability/ally the player HAS, set `requires` to its name. Otherwise, null.
 - NEVER offer a choice that is identical to the action the player just took.
 """
 
@@ -80,12 +82,17 @@ async def gamemaster_node(state: GraphState) -> GraphState:
     abilities = ", ".join([a.get("name", "") for a in char.get("abilities", [])]) or "None"
     inventory = ", ".join([it.get("name", "") for it in char.get("economy", {}).get("inventory", [])]) or "Empty"
     quests = ", ".join([q.get("title", "") for q in config.get("quests", []) if q.get("status") == "active"]) or "None"
+    
+    relationships = char.get("relationships", [])
+    high_affection = [r.get("npc_name", "") for r in relationships if r.get("affection", 0) >= 70]
+    allies = ", ".join(high_affection) or "None"
 
     prompt_str = SYSTEM_PROMPT.format(
         chapter_content=state.get("chapter_content", "")[:1500],
         abilities=abilities,
         inventory=inventory,
         quests=quests,
+        allies=allies,
     )
 
     try:

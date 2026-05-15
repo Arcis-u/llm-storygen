@@ -159,6 +159,9 @@ Abilities: {abilities_summary}
 # RECENT MEMORIES (Last 3 chapters summaries)
 {recent_summaries}
 
+# DEEP MEMORY (RAG matches for current action)
+{deep_memories}
+
 # PLOT TRIGGER ENFORCEMENT (from user's pre-game setup)
 {plot_trigger_instructions}
 
@@ -240,6 +243,9 @@ async def director_node(state: GraphState) -> GraphState:
     desires_list = char.get("psychology", {}).get("desires", [])
     desires_summary = "\n".join([f"- {d}" for d in desires_list]) if desires_list else "Không có ý định đặc biệt nào."
 
+    relevant_memories = state.get("relevant_memories", [])
+    deep_memories_str = "\n".join([f"- {m}" for m in relevant_memories]) if relevant_memories else "No relevant deep memories found."
+
     system_prompt = DIRECTOR_SYSTEM.format(
         genre=config.get("genre", "Fantasy"),
         tone=config.get("tone", "dark, immersive"),
@@ -252,6 +258,7 @@ async def director_node(state: GraphState) -> GraphState:
         abilities_summary=abilities_summary,
         desires=desires_summary,
         recent_summaries=recent_summaries,
+        deep_memories=deep_memories_str,
         plot_trigger_instructions=trigger_instructions or "No triggers pending.",
         ability_enforcement=ability_enforcement or "No ability constraints triggered.",
         god_mode_status="ON — Player can do anything, no limits." if is_god_mode else "OFF — Enforce realistic consequences.",

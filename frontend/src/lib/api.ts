@@ -71,9 +71,77 @@ export async function submitAction(data: {
   choice_id?: number;
   custom_action?: string;
   target_location_id?: string;
+  dice_result?: number;
 }) {
   const response = await api.post('/api/story/turn', data);
   return response.data;
+}
+
+export async function streamAction(
+  data: {
+    story_id: string;
+    action_type: 'choice' | 'custom' | 'move';
+    choice_id?: number;
+    custom_action?: string;
+    target_location_id?: string;
+    dice_result?: number;
+  },
+  onToken: (token: string) => void,
+  onComplete: (chapter: any, config: any) => void,
+  onError: (error: string) => void
+) {
+  try {
+    const token = useAuthStore.getState().token;
+    const response = await fetch(`${API_BASE}/api/story/stream-turn`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      },
+      body: JSON.stringify(data)
+    });
+
+    if (!response.ok || !response.body) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      
+      // Keep the last incomplete line in the buffer
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const jsonStr = line.substring(6);
+          if (!jsonStr.trim()) continue;
+          
+          try {
+            const parsed = JSON.parse(jsonStr);
+            if (parsed.type === 'token') {
+              onToken(parsed.text);
+            } else if (parsed.type === 'done') {
+              onComplete(parsed.chapter, parsed.config);
+            } else if (parsed.type === 'error') {
+              onError(parsed.message);
+            }
+          } catch (e) {
+            console.error("Error parsing SSE JSON:", e, jsonStr);
+          }
+        }
+      }
+    }
+  } catch (err: any) {
+    onError(err.message || "Streaming failed");
+  }
 }
 
 // --- Instant Actions (System UI, No AI) ---
@@ -83,6 +151,15 @@ export async function submitInstantAction(data: {
   item_id?: string;
 }) {
   const response = await api.post('/api/story/action/instant', data);
+  return response.data;
+}
+
+export async function submitCraftAction(data: {
+  story_id: string;
+  item_id_1: string;
+  item_id_2: string;
+}) {
+  const response = await api.post('/api/story/action/craft', data);
   return response.data;
 }
 

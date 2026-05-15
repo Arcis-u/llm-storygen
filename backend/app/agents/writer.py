@@ -18,6 +18,7 @@ class WriterOutput(BaseModel):
     chapter_title: str = Field(description="A compelling, short title for the chapter (2-6 words).")
     chapter_content: str = Field(description="The full, beautifully written chapter prose.")
     chapter_summary: str = Field(description="A concise 2-3 sentence summary capturing key events and emotional beats.")
+    tone: str = Field(description="The emotional tone of this scene: combat, ambient, sad, tense, or epic.")
 
 
 SYSTEM_PROMPT = """You are a world-class interactive fiction author. Your writing rivals the best published novels.
@@ -28,6 +29,9 @@ Tone: {tone}
 
 # DIRECTOR'S PLAN (Follow this EXACTLY)
 {director_plan}
+
+# RELEVANT PAST MEMORIES (Use as deep context to make the story richer)
+{deep_memories}
 
 # CRAFT GUIDELINES — Follow ALL of these:
 
@@ -92,11 +96,18 @@ async def writer_node(state: GraphState) -> GraphState:
     llm = get_llm(settings.writer_model, temperature=0.75, max_tokens=2048)
 
     config = state["story_config"]
+    relevant_memories = state.get("relevant_memories", [])
+    deep_memories_str = "\n".join([f"- {m}" for m in relevant_memories]) if relevant_memories else "No deep memories found."
+
+    critic_feedback = state.get("critic_feedback", "")
+    feedback_str = f"\n\n# CRITIC FEEDBACK (MUST FIX)\nThe previous draft was rejected. Fix these issues:\n{critic_feedback}\n" if critic_feedback else ""
+
     prompt_str = SYSTEM_PROMPT.format(
         genre=config.get("genre", "Fantasy"),
         tone=config.get("tone", "dark, immersive, detailed"),
-        director_plan=state.get("director_plan", "No plan provided. Improvise a dramatic scene.")
-    )
+        director_plan=state.get("director_plan", "No plan provided. Improvise a dramatic scene."),
+        deep_memories=deep_memories_str
+    ) + feedback_str
 
     try:
         # Try structured output first (works with OpenAI, Gemini)
@@ -109,13 +120,14 @@ async def writer_node(state: GraphState) -> GraphState:
         state["chapter_title"] = response.chapter_title.strip().strip('"').strip("'")
         state["chapter_content"] = response.chapter_content
         state["chapter_summary"] = response.chapter_summary
+        state["tone"] = response.tone
         print(f"[WRITER] Chapter written via structured output ({len(response.chapter_content)} chars)")
     except Exception as e:
         print(f"[WRITER] Structured output failed ({e}), falling back to plain text...")
         try:
             # Fallback: plain text generation (works with all models including HuggingFace)
             messages = [
-                SystemMessage(content=prompt_str + "\n\nIMPORTANT: Write the chapter prose directly. At the very end, add a line '---TITLE---' followed by a short title, and then a line '---SUMMARY---' followed by a 2-3 sentence summary."),
+                SystemMessage(content=prompt_str + "\n\nIMPORTANT: Write the chapter prose directly. At the very end, add a line '---TITLE---' followed by a short title, then a line '---SUMMARY---' followed by a 2-3 sentence summary, and then a line '---TONE---' followed by a 1 word tone (e.g., combat, sad)."),
                 HumanMessage(content="Write the chapter now. Make it unforgettable.")
             ]
             response = await llm.ainvoke(messages)
@@ -126,18 +138,26 @@ async def writer_node(state: GraphState) -> GraphState:
                 parts = raw_text.split("---TITLE---", 1)
                 content = parts[0].strip()
                 title_summary = parts[1].split("---SUMMARY---", 1)
+                if "---TONE---" in title_summary[1]:
+                    sum_tone = title_summary[1].split("---TONE---", 1)
+                    state["chapter_summary"] = sum_tone[0].strip()
+                    state["tone"] = sum_tone[1].strip()
+                else:
+                    state["chapter_summary"] = title_summary[1].strip()
+                    state["tone"] = "ambient"
                 state["chapter_content"] = content
                 state["chapter_title"] = title_summary[0].strip()
-                state["chapter_summary"] = title_summary[1].strip()
             elif "---SUMMARY---" in raw_text:
                 parts = raw_text.split("---SUMMARY---", 1)
                 state["chapter_content"] = parts[0].strip()
                 state["chapter_title"] = "Chương Mới"
                 state["chapter_summary"] = parts[1].strip()
+                state["tone"] = "ambient"
             else:
                 state["chapter_content"] = raw_text.strip()
                 state["chapter_title"] = "Chương Mới"
                 state["chapter_summary"] = raw_text[:200].strip() + "..."
+                state["tone"] = "ambient"
             
             print(f"[WRITER] Chapter written via plain text ({len(state['chapter_content'])} chars)")
         except Exception as e2:

@@ -177,6 +177,7 @@ class ShopItem(BaseModel):
     description: str
     narrative_impact: str = Field(default="", description="How this item influences the story upon purchase")
     is_consumable: bool = Field(default=False)
+    is_crafting_material: bool = Field(default=False)
     max_durability: Optional[int] = Field(default=None)
 
 
@@ -185,6 +186,7 @@ class InventoryItem(BaseModel):
     item_id: str
     name: str
     quantity: int = Field(default=1)
+    is_crafting_material: bool = Field(default=False)
     current_durability: Optional[int] = Field(default=None)
 
 
@@ -297,6 +299,10 @@ class CharacterState(BaseModel):
     """The complete current state of the player character."""
     name: str
     backstory: str = ""
+    hp: float = Field(default=100.0, description="Current Health Points")
+    max_hp: float = Field(default=100.0, description="Maximum Health Points")
+    energy: float = Field(default=100.0, description="Current Energy/Mana/Stamina")
+    max_energy: float = Field(default=100.0, description="Maximum Energy/Mana/Stamina")
     traits: list[CustomTrait] = Field(default_factory=list)
     abilities: list[SpecialAbility] = Field(default_factory=list)
     skills: list[CharacterSkill] = Field(default_factory=list)
@@ -366,6 +372,7 @@ class ChapterContent(BaseModel):
     chapter_title: str = Field(default="", description="A short, evocative title for the chapter")
     content: str = Field(description="The full chapter text")
     summary: str = Field(default="", description="AI-generated summary for memory storage")
+    tone: str = Field(default="ambient", description="The emotional tone of this chapter: combat, ambient, sad, tense, epic, etc.")
     choices: list[StoryChoice] = Field(default_factory=list)
     state_changes: dict = Field(
         default_factory=dict,
@@ -419,6 +426,13 @@ class PlayerActionRequest(BaseModel):
     target_location_id: Optional[str] = Field(default=None)
     item_id: Optional[str] = Field(default=None)
     org_id: Optional[str] = Field(default=None)
+    dice_result: Optional[int] = Field(default=None, description="1-20 D20 dice result for risky actions")
+
+class CraftActionRequest(BaseModel):
+    """Request body for crafting two items together."""
+    story_id: str
+    item_id_1: str
+    item_id_2: str
 
 
 class StoryStateResponse(BaseModel):

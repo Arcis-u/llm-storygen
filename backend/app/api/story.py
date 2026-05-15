@@ -327,6 +327,7 @@ async def start_story(story_id: str):
         chapter_title=chapter_title,
         content=chapter_content,
         summary=chapter_summary,
+        tone=final_state.get("tone", "ambient"),
         choices=[StoryChoice(**c) for c in choices] if choices else [],
     )
 
@@ -444,6 +445,7 @@ async def process_turn(request: PlayerActionRequest):
             chapter_title=chapter_title,
             content=chapter_content,
             summary=chapter_summary,
+            tone=final_state.get("tone", "ambient"),
             choices=[StoryChoice(**c) for c in choices] if choices else [],
         )
 
@@ -594,10 +596,32 @@ def _preprocess_action(request: PlayerActionRequest, config: StoryConfig) -> str
 
     if action_type == "choice":
         # Look up the choice text from the previous chapter's choices
-        return f"Player selected choice #{request.choice_id}."
+        base_context = f"Player selected choice #{request.choice_id}."
+        if request.dice_result is not None:
+            dice = request.dice_result
+            if dice == 1:
+                base_context += f"\n[RNG OUTCOME: D20 Roll = {dice} (CRITICAL FAILURE)]. Mệnh lệnh cho Director: Hành động này RÚT CỤC ĐÃ THẤT BẠI THẢM HẠI do xui xẻo. Hãy miêu tả hậu quả tồi tệ nhất có thể xảy ra, tổn thương nặng nề đến cơ thể hoặc tinh thần (giảm mạnh HP/Energy). Đừng khoan nhượng."
+            elif 2 <= dice <= 9:
+                base_context += f"\n[RNG OUTCOME: D20 Roll = {dice} (FAILURE)]. Mệnh lệnh cho Director: Hành động này ĐÃ THẤT BẠI. Hãy miêu tả hậu quả tiêu cực, sai lầm, hoặc bị thương nhẹ (giảm HP)."
+            elif 10 <= dice <= 19:
+                base_context += f"\n[RNG OUTCOME: D20 Roll = {dice} (SUCCESS)]. Mệnh lệnh cho Director: Hành động này ĐÃ THÀNH CÔNG. Hãy miêu tả người chơi vượt qua thử thách một cách suôn sẻ."
+            elif dice == 20:
+                base_context += f"\n[RNG OUTCOME: D20 Roll = {dice} (CRITICAL SUCCESS)]. Mệnh lệnh cho Director: Hành động này ĐÃ THÀNH CÔNG RỰC RỠ. Hãy miêu tả một phép màu hoặc sự thể hiện xuất thần, mang lại phần thưởng ngoài mong đợi."
+        return base_context
 
     elif action_type == "custom":
-        return f"Player's custom action: \"{request.custom_action}\""
+        base_context = f"Player's custom action: \"{request.custom_action}\""
+        if request.dice_result is not None:
+            dice = request.dice_result
+            if dice == 1:
+                base_context += f"\n[RNG OUTCOME: D20 Roll = {dice} (CRITICAL FAILURE)]. Mệnh lệnh cho Director: Hành động này RÚT CỤC ĐÃ THẤT BẠI THẢM HẠI do xui xẻo. Hãy miêu tả hậu quả tồi tệ nhất có thể xảy ra, tổn thương nặng nề đến cơ thể hoặc tinh thần (giảm mạnh HP/Energy). Đừng khoan nhượng."
+            elif 2 <= dice <= 9:
+                base_context += f"\n[RNG OUTCOME: D20 Roll = {dice} (FAILURE)]. Mệnh lệnh cho Director: Hành động này ĐÃ THẤT BẠI. Hãy miêu tả hậu quả tiêu cực, sai lầm, hoặc bị thương nhẹ (giảm HP)."
+            elif 10 <= dice <= 19:
+                base_context += f"\n[RNG OUTCOME: D20 Roll = {dice} (SUCCESS)]. Mệnh lệnh cho Director: Hành động này ĐÃ THÀNH CÔNG. Hãy miêu tả người chơi vượt qua thử thách một cách suôn sẻ."
+            elif dice == 20:
+                base_context += f"\n[RNG OUTCOME: D20 Roll = {dice} (CRITICAL SUCCESS)]. Mệnh lệnh cho Director: Hành động này ĐÃ THÀNH CÔNG RỰC RỠ. Hãy miêu tả một phép màu hoặc sự thể hiện xuất thần, mang lại phần thưởng ngoài mong đợi."
+        return base_context
 
     elif action_type == "move":
         target_id = request.target_location_id or request.custom_action
@@ -845,6 +869,97 @@ async def process_instant_action(request: InstantActionRequest, user: dict = Dep
         return {"status": "success", "message": f"Bought {shop_item.name}", "economy": config.character.economy.model_dump()}
     
     return {"status": "error", "message": "Unknown action type"}
+
+
+# ============================================================
+# POST /action/craft — Crafting System
+# ============================================================
+@router.post("/action/craft")
+async def process_crafting(request: CraftActionRequest, user: dict = Depends(get_current_user)):
+    from app.core.config import get_settings
+    from app.core.llm_factory import get_llm
+    from langchain_core.messages import SystemMessage, HumanMessage
+    import json
+    import uuid
+    
+    db = await get_mongo_db()
+    story = await db.stories.find_one({"story_id": request.story_id, "user_id": user["user_id"]})
+    if not story:
+        raise HTTPException(status_code=404, detail="Story not found")
+        
+    config = StoryConfig(**story)
+    inv = config.character.economy.inventory
+    
+    item1 = next((i for i in inv if i.item_id == request.item_id_1), None)
+    item2 = next((i for i in inv if i.item_id == request.item_id_2), None)
+    
+    if not item1 or not item2:
+        raise HTTPException(status_code=400, detail="Missing items in inventory")
+        
+    # Generate new item via LLM
+    settings = get_settings()
+    llm = get_llm(settings.gamemaster_model, temperature=0.7)
+    
+    prompt = f"""You are the Crafting Master of an RPG.
+The player is combining two items:
+1. "{item1.name}"
+2. "{item2.name}"
+
+Story Genre: {config.genre}
+Tone: {config.tone}
+
+If these items can logically combine, create a new, better item. 
+If they cannot logically combine, create a "Trash" or "Failed Experiment" item.
+Respond ONLY in valid JSON format:
+{{
+  "name": "New Item Name",
+  "is_crafting_material": true or false
+}}
+"""
+    try:
+        messages = [SystemMessage(content=prompt), HumanMessage(content="Combine them now.")]
+        response = await llm.ainvoke(messages)
+        raw = response.content if hasattr(response, 'content') else str(response)
+        
+        start = raw.find('{')
+        end = raw.rfind('}')
+        if start != -1 and end != -1:
+            parsed = json.loads(raw[start:end+1])
+        else:
+            raise ValueError("No JSON found")
+            
+        new_name = parsed.get("name", "Vật phẩm kì dị")
+        is_mat = parsed.get("is_crafting_material", False)
+        
+    except Exception as e:
+        print(f"[CRAFTING ERROR] {e}")
+        new_name = f"Mảnh vỡ của {item1.name} và {item2.name}"
+        is_mat = False
+
+    # Remove 1 quantity from item1 and item2
+    for item in [item1, item2]:
+        item.quantity -= 1
+        
+    # Filter out items with 0 quantity
+    config.character.economy.inventory = [i for i in inv if i.quantity > 0]
+    
+    # Add new item
+    from app.models.schemas import InventoryItem
+    new_item_id = str(uuid.uuid4())
+    config.character.economy.inventory.append(
+        InventoryItem(item_id=new_item_id, name=new_name, quantity=1, is_crafting_material=is_mat)
+    )
+    
+    await db.stories.update_one(
+        {"story_id": request.story_id},
+        {"$set": {"character.economy.inventory": [i.model_dump() for i in config.character.economy.inventory]}}
+    )
+    
+    return {
+        "status": "success", 
+        "message": f"Ghép thành công: {new_name}!",
+        "economy": config.character.economy.model_dump()
+    }
 
 # ============================================================
 # POST /action/intent — Add Intent to Psychology

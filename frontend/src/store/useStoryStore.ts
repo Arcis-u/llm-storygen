@@ -84,6 +84,7 @@ export interface ShopItem {
   description: string;
   narrative_impact: string;
   is_consumable: boolean;
+  is_crafting_material: boolean;
   max_durability: number | null;
 }
 
@@ -91,6 +92,7 @@ export interface InventoryItem {
   item_id: string;
   name: string;
   quantity: number;
+  is_crafting_material: boolean;
   current_durability: number | null;
 }
 
@@ -148,6 +150,10 @@ export interface CharacterEconomy {
 export interface CharacterState {
   name: string;
   backstory: string;
+  hp: number;
+  max_hp: number;
+  energy: number;
+  max_energy: number;
   traits: CustomTrait[];
   abilities: SpecialAbility[];
   skills: CharacterSkill[];
@@ -171,6 +177,7 @@ export interface ChapterContent {
   chapter_title?: string;
   content: string;
   summary: string;
+  tone: string;
   choices: StoryChoice[];
   state_changes: Record<string, unknown>;
   created_at: string;
@@ -236,6 +243,10 @@ interface StoryStore {
 const initialCharacter: CharacterState = {
   name: '',
   backstory: '',
+  hp: 100,
+  max_hp: 100,
+  energy: 100,
+  max_energy: 100,
   traits: [],
   abilities: [],
   skills: [],

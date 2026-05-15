@@ -10,6 +10,7 @@ from app.graph.state import GraphState
 from app.agents.memory import memory_retrieval_node
 from app.agents.director import director_node
 from app.agents.writer import writer_node
+from app.agents.critic import critic_node
 from app.agents.state_extractor import state_extractor_node
 from app.agents.gamemaster import gamemaster_node
 
@@ -22,6 +23,13 @@ def should_generate_choices(state: GraphState) -> str:
     return "gamemaster"
 
 
+def check_critic(state: GraphState) -> str:
+    """Conditional edge: loop back to writer if critic fails."""
+    if state.get("critic_passed", True):
+        return "state_extractor"
+    return "writer"
+
+
 def build_story_workflow():
     """Builds and compiles the story generation pipeline."""
     workflow = StateGraph(GraphState)
@@ -30,14 +38,25 @@ def build_story_workflow():
     workflow.add_node("memory_retrieval", memory_retrieval_node)
     workflow.add_node("director", director_node)
     workflow.add_node("writer", writer_node)
+    workflow.add_node("critic", critic_node)
     workflow.add_node("state_extractor", state_extractor_node)
     workflow.add_node("gamemaster", gamemaster_node)
 
-    # Linear edges: Memory → Director → Writer → StateExtractor
+    # Linear edges: Memory → Director → Writer → Critic
     workflow.set_entry_point("memory_retrieval")
     workflow.add_edge("memory_retrieval", "director")
     workflow.add_edge("director", "writer")
-    workflow.add_edge("writer", "state_extractor")
+    workflow.add_edge("writer", "critic")
+
+    # Conditional edge: Critic → StateExtractor OR Writer (loop)
+    workflow.add_conditional_edges(
+        "critic",
+        check_critic,
+        {
+            "state_extractor": "state_extractor",
+            "writer": "writer",
+        }
+    )
 
     # Conditional edge: StateExtractor → GameMaster OR END
     workflow.add_conditional_edges(

@@ -11,25 +11,11 @@ from app.core.config import get_settings
 async def memory_retrieval_node(state: GraphState) -> GraphState:
     print("--- NODE 1: MEMORY RETRIEVAL ---")
     
-    action = state["player_action"]
+    action = state.get("player_action", {})
     story_id = action.get("story_id")
     
-    # 1. Build Query Text
-    query_text = ""
-    action_type = action.get("action_type")
-    
-    if action_type == "custom":
-        query_text = action.get("custom_action", "")
-    elif action_type == "choice":
-        query_text = f"Player chose option {action.get('choice_id')}"
-        # In a real app, we'd look up the exact choice text from the previous state
-    elif action_type == "buy_item":
-        query_text = f"Player bought item {action.get('item_id')}"
-    elif action_type == "join_faction":
-        query_text = f"Player interacted with organization {action.get('org_id')}"
-    else:
-        query_text = "Continuing the story."
-        
+    # 1. Build Query Text from action_context
+    query_text = state.get("action_context", "The player takes an action.")
     print(f"[MEMORY] Query text: {query_text}")
     
     # 2. Get Embedding

@@ -18,6 +18,12 @@ class GraphState(TypedDict):
     chapter_title: str
     chapter_content: str
     chapter_summary: str
+    tone: str
+
+    # --- CRITIC OUTPUT ---
+    critic_feedback: str
+    critic_passed: bool
+    revision_count: int
 
     # --- EDITOR OUTPUT ---
     state_changes: dict         # The JSON diff

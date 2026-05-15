@@ -24,10 +24,12 @@ import {
   Backpack,
 } from "lucide-react";
 import { useStoryStore, ChapterContent } from "@/store/useStoryStore";
-import { submitAction, submitInstantAction, submitIntent, getStoryState } from "@/lib/api";
+import { submitAction, submitInstantAction, submitIntent, submitCraftAction, getStoryState, streamAction } from "@/lib/api";
+import { audioEngine } from "@/lib/audio";
 
 import CityMap from "@/components/CityMap";
 import RelationshipGraph from "@/components/RelationshipGraph";
+import DiceRoller from "@/components/DiceRoller";
 import MarketPanel from "@/components/MarketPanel";
 import FactionPanel from "@/components/FactionPanel";
 import PlotTimeline from "@/components/PlotTimeline";
@@ -137,8 +139,50 @@ function StatBar({
 // Left Panel: Dashboard
 // ============================================================
 function DashboardPanel() {
-  const { character, quests } = useStoryStore();
+  const { character, quests, storyId, updateFullState } = useStoryStore();
   const [dashTab, setDashTab] = useState<"status" | "relations" | "items">("status");
+  const [isCraftingMode, setIsCraftingMode] = useState(false);
+  const [selectedCraftItems, setSelectedCraftItems] = useState<string[]>([]);
+  const [isCrafting, setIsCrafting] = useState(false);
+
+  const handleCraft = async () => {
+    if (selectedCraftItems.length !== 2 || !storyId) return;
+    import("@/lib/audio").then(({ audioEngine }) => audioEngine.playSfx("buy"));
+    setIsCrafting(true);
+    try {
+      const res = await submitCraftAction({
+        story_id: storyId,
+        item_id_1: selectedCraftItems[0],
+        item_id_2: selectedCraftItems[1]
+      });
+      // The API returns the updated economy state, but for robust sync we might need full state.
+      // We can manually update the economy in the store, or rely on the next full poll.
+      // For now, let's just trigger a full state fetch if possible, or update the partial state.
+      const fullState = await getStoryState(storyId);
+      updateFullState(fullState);
+      
+      setSelectedCraftItems([]);
+      setIsCraftingMode(false);
+      import("@/lib/audio").then(({ audioEngine }) => audioEngine.playSfx("success"));
+    } catch (e) {
+      console.error(e);
+      import("@/lib/audio").then(({ audioEngine }) => audioEngine.playSfx("error"));
+    } finally {
+      setIsCrafting(false);
+    }
+  };
+
+  const toggleCraftItem = (itemId: string) => {
+    if (!isCraftingMode) return;
+    import("@/lib/audio").then(({ audioEngine }) => audioEngine.playSfx("click"));
+    if (selectedCraftItems.includes(itemId)) {
+      setSelectedCraftItems(prev => prev.filter(i => i !== itemId));
+    } else {
+      if (selectedCraftItems.length < 2) {
+        setSelectedCraftItems(prev => [...prev, itemId]);
+      }
+    }
+  };
 
   return (
     <div
@@ -229,6 +273,8 @@ function DashboardPanel() {
               )}
 
               <div style={{ background: "rgba(255,255,255,0.02)", borderRadius: "6px", padding: "1.2rem", border: "1px solid rgba(255,255,255,0.05)" }}>
+                <StatBar label="HP" value={character.hp} maxVal={character.max_hp} color="var(--accent-danger)" />
+                <StatBar label="Năng lượng" value={character.energy} maxVal={character.max_energy} color="var(--accent-info)" />
                 <StatBar label="Stress" value={character.psychology.stress_level} maxVal={100} color="rgba(255,255,255,0.8)" />
                 {character.traits.map((t, i) => (
                   <StatBar key={i} label={t.name} value={t.current_value} maxVal={t.max_value} color="rgba(255,255,255,0.5)" />
@@ -300,7 +346,29 @@ function DashboardPanel() {
 
           {/* ITEMS */}
           {dashTab === "items" && (
-            <div style={{ position: "relative", padding: "0.5rem", background: "rgba(0,0,0,0.2)", border: "1px solid rgba(255,255,255,0.05)" }}>
+            <div style={{ position: "relative", padding: "0.5rem", background: "rgba(0,0,0,0.2)", border: "1px solid rgba(255,255,255,0.05)", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: "0.7rem", color: "var(--text-muted)", textTransform: "uppercase" }}>Kho đồ ({character.economy.inventory.length})</span>
+                <button
+                  onClick={() => {
+                    setIsCraftingMode(!isCraftingMode);
+                    setSelectedCraftItems([]);
+                    import("@/lib/audio").then(({ audioEngine }) => audioEngine.playSfx("click"));
+                  }}
+                  style={{
+                    background: isCraftingMode ? "var(--accent-info)" : "transparent",
+                    border: `1px solid ${isCraftingMode ? "var(--accent-info)" : "rgba(255,255,255,0.2)"}`,
+                    color: isCraftingMode ? "#000" : "var(--text-muted)",
+                    padding: "0.2rem 0.5rem",
+                    fontSize: "0.65rem",
+                    cursor: "pointer",
+                    borderRadius: "4px"
+                  }}
+                >
+                  {isCraftingMode ? "HỦY CHẾ TẠO" : "CHẾ TẠO (GHÉP ĐỒ)"}
+                </button>
+              </div>
+
               <div className="scanline-v" style={{ opacity: 0.5 }} />
               <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "0.5rem", position: "relative", zIndex: 2 }}>
                 {character.economy.inventory.length === 0 ? (
@@ -308,34 +376,55 @@ function DashboardPanel() {
                     INVENTORY_EMPTY
                   </div>
                 ) : (
-                  character.economy.inventory.map((item, i) => (
-                    <div
-                      key={i}
-                      title={`${item.name} x${item.quantity}`}
-                      style={{
-                        aspectRatio: "1",
-                        background: "rgba(20,20,30,0.8)",
-                        border: "1px solid rgba(0, 245, 212, 0.3)",
-                        position: "relative",
-                        boxShadow: "inset 0 0 10px rgba(0, 245, 212, 0.1)",
-                        cursor: "help",
-                        overflow: "hidden"
-                      }}
-                    >
-                      <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", background: "linear-gradient(135deg, rgba(255,255,255,0.05) 0%, transparent 50%)" }} />
-                      <div style={{ position: "absolute", width: "70%", height: "70%", top: "15%", left: "15%", opacity: 0.8, mixBlendMode: "screen" }}>
-                        <Image src="/images/loots.png" alt="Item" fill style={{ objectFit: "contain" }} />
+                  character.economy.inventory.map((item, i) => {
+                    const isSelected = selectedCraftItems.includes(item.item_id);
+                    return (
+                      <div
+                        key={item.item_id || i}
+                        title={`${item.name} x${item.quantity}`}
+                        onClick={() => toggleCraftItem(item.item_id)}
+                        style={{
+                          aspectRatio: "1",
+                          background: isSelected ? "var(--accent-info)" : "rgba(20,20,30,0.8)",
+                          border: `1px solid ${isSelected ? "#fff" : "rgba(0, 245, 212, 0.3)"}`,
+                          position: "relative",
+                          boxShadow: isSelected ? "0 0 15px var(--accent-info)" : "inset 0 0 10px rgba(0, 245, 212, 0.1)",
+                          cursor: isCraftingMode ? "pointer" : "help",
+                          overflow: "hidden",
+                          transition: "all 0.2s ease"
+                        }}
+                      >
+                        <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", background: "linear-gradient(135deg, rgba(255,255,255,0.05) 0%, transparent 50%)" }} />
+                        <div style={{ position: "absolute", width: "70%", height: "70%", top: "15%", left: "15%", opacity: isSelected ? 1 : 0.8, mixBlendMode: isSelected ? "normal" : "screen" }}>
+                          <Image src="/images/loots.png" alt="Item" fill style={{ objectFit: "contain", filter: isSelected ? "brightness(0) invert(1)" : "none" }} />
+                        </div>
+                        <span style={{ position: "absolute", bottom: 2, right: 4, fontSize: "0.6rem", fontWeight: 800, color: isSelected ? "#000" : "#fff", zIndex: 2, textShadow: isSelected ? "none" : "0 0 4px #000" }}>
+                          x{item.quantity}
+                        </span>
+                        {item.current_durability !== null && (
+                          <div style={{ position: "absolute", bottom: 0, left: 0, height: 2, width: `${item.current_durability}%`, background: "var(--accent-success)", boxShadow: "0 0 5px var(--accent-success)" }} />
+                        )}
                       </div>
-                      <span style={{ position: "absolute", bottom: 2, right: 4, fontSize: "0.6rem", fontWeight: 800, color: "#fff", zIndex: 2, textShadow: "0 0 4px #000" }}>
-                        x{item.quantity}
-                      </span>
-                      {item.current_durability !== null && (
-                        <div style={{ position: "absolute", bottom: 0, left: 0, height: 2, width: `${item.current_durability}%`, background: "var(--accent-success)", boxShadow: "0 0 5px var(--accent-success)" }} />
-                      )}
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
+
+              <AnimatePresence>
+                {isCraftingMode && selectedCraftItems.length === 2 && (
+                  <motion.button
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 10 }}
+                    onClick={handleCraft}
+                    disabled={isCrafting}
+                    className="action-button"
+                    style={{ marginTop: "0.5rem", background: "var(--accent-info)", color: "#000", fontWeight: 800 }}
+                  >
+                    {isCrafting ? <Loader2 size={16} className="spin" /> : "TIẾN HÀNH GHÉP"}
+                  </motion.button>
+                )}
+              </AnimatePresence>
             </div>
           )}
         </motion.div>
@@ -467,6 +556,10 @@ function StoryPanel() {
   const [activeChapter, setActiveChapter] = useState<number | null>(null);
   const [isTocOpen, setIsTocOpen] = useState(false);
   const [readMode, setReadMode] = useState<"continuous" | "single">("continuous");
+  const [streamingText, setStreamingText] = useState("");
+  
+  // Dice Roller State
+  const [pendingChoice, setPendingChoice] = useState<{ id: number; risk: "risky" | "crucial" } | null>(null);
 
   const latestChapter = chapters.length > 0 ? chapters[chapters.length - 1] : null;
 
@@ -477,6 +570,9 @@ function StoryPanel() {
     if (chapters.length > prevChapterCount.current) {
       if (latestChapter) {
         setActiveChapter(latestChapter.chapter_number);
+        // Play BGM based on new chapter's tone
+        audioEngine.playBGM(latestChapter.tone || "ambient");
+        
         // If in single mode, scroll to top of the new chapter
         if (readMode === "single" && scrollRef.current) {
           scrollRef.current.scrollTop = 0;
@@ -485,6 +581,7 @@ function StoryPanel() {
     } else if (latestChapter && !activeChapter) {
       // Initial load
       setActiveChapter(latestChapter.chapter_number);
+      audioEngine.playBGM(latestChapter.tone || "ambient");
     }
     prevChapterCount.current = chapters.length;
   }, [chapters, latestChapter, activeChapter, readMode]);
@@ -530,24 +627,56 @@ function StoryPanel() {
 
   }, [chapters, readMode]);
 
-  const handleChoice = async (choiceId: number) => {
+  const handleChoice = async (choiceId: number, riskLevel?: "normal" | "risky" | "crucial") => {
     if (!storyId || isBusy) return;
+    
+    if (riskLevel === "risky" || riskLevel === "crucial") {
+      setPendingChoice({ id: choiceId, risk: riskLevel });
+      return;
+    }
+
+    executeChoice(choiceId);
+  };
+
+  const executeChoice = async (choiceId: number, diceResult?: number) => {
     import("@/lib/audio").then(({ audioEngine }) => audioEngine.playSfx("click"));
     setLoading(true);
     setIsProcessing(true);
+    setPendingChoice(null);
+    setStreamingText("");
     try {
-      const result = await submitAction({
-        story_id: storyId,
-        action_type: "choice",
-        choice_id: choiceId,
-      });
-      updateFullState(result);
-      setIsProcessing(false);
+      await streamAction(
+        {
+          story_id: storyId!,
+          action_type: "choice",
+          choice_id: choiceId,
+          dice_result: diceResult,
+        },
+        (token) => {
+          setStreamingText(prev => prev + token);
+          if (readMode === "continuous" && scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+          }
+        },
+        (chapter, config) => {
+          updateFullState({ story_id: storyId!, chapter, config });
+          setIsProcessing(false);
+          setStreamingText("");
+        },
+        (error) => {
+          console.error(error);
+          setError("Lỗi khi tạo chương mới.");
+          setLoading(false);
+          setIsProcessing(false);
+          setStreamingText("");
+        }
+      );
     } catch (err) {
       console.error(err);
-      setError("Lỗi khi tạo chương mới.");
+      setError("Lỗi không lường trước.");
       setLoading(false);
       setIsProcessing(false);
+      setStreamingText("");
     }
   };
 
@@ -556,20 +685,40 @@ function StoryPanel() {
     import("@/lib/audio").then(({ audioEngine }) => audioEngine.playSfx("click"));
     setLoading(true);
     setIsProcessing(true);
+    setStreamingText("");
     try {
-      const result = await submitAction({
-        story_id: storyId,
-        action_type: "custom",
-        custom_action: customInput.trim(),
-      });
-      updateFullState(result);
-      setCustomInput("");
-      setIsProcessing(false);
+      await streamAction(
+        {
+          story_id: storyId,
+          action_type: "custom",
+          custom_action: customInput.trim(),
+        },
+        (token) => {
+          setStreamingText(prev => prev + token);
+          if (readMode === "continuous" && scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+          }
+        },
+        (chapter, config) => {
+          updateFullState({ story_id: storyId, chapter, config });
+          setCustomInput("");
+          setIsProcessing(false);
+          setStreamingText("");
+        },
+        (error) => {
+          console.error(error);
+          setError("Lỗi khi tạo chương mới.");
+          setLoading(false);
+          setIsProcessing(false);
+          setStreamingText("");
+        }
+      );
     } catch (err) {
       console.error(err);
-      setError("Lỗi khi tạo chương mới.");
+      setError("Lỗi không lường trước.");
       setLoading(false);
       setIsProcessing(false);
+      setStreamingText("");
     }
   };
 
@@ -871,19 +1020,38 @@ function StoryPanel() {
           </AnimatePresence>
         )}
 
-        {/* Loading indicator */}
+        {/* Loading indicator / Streaming Text */}
         {isBusy && (
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
               margin: "3rem 0"
             }}
           >
-            <AILoadingTerminal />
+            {streamingText ? (
+              <div className="chapter-container" style={{ position: "relative" }}>
+                <div style={{ position: "absolute", top: -10, left: 10, background: "var(--accent-info)", color: "#000", padding: "2px 8px", fontSize: "0.6rem", fontWeight: 800, borderRadius: "4px" }}>
+                  ĐANG VIẾT...
+                </div>
+                <div className="story-text">
+                  <ReactMarkdown>{streamingText}</ReactMarkdown>
+                  <span style={{
+                    display: "inline-block",
+                    width: 4,
+                    height: "1.1em",
+                    background: "var(--accent-info)",
+                    animation: "pulse-glow 1s ease-in-out infinite",
+                    verticalAlign: "text-bottom",
+                    marginLeft: 4,
+                  }} />
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: "flex", justifyContent: "center" }}>
+                <AILoadingTerminal />
+              </div>
+            )}
           </motion.div>
         )}
       </div>
@@ -917,7 +1085,7 @@ function StoryPanel() {
                   key={c.choice_id}
                   id={`choice-${c.choice_id}`}
                   className="choice-card-wrapper"
-                  onClick={() => handleChoice(c.choice_id)}
+                  onClick={() => handleChoice(c.choice_id, c.risk_level)}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: idx * 0.1, duration: 0.4 }}
@@ -995,6 +1163,18 @@ function StoryPanel() {
           </div>
         </motion.div>
       )}
+
+      {/* Dice Roller Overlay */}
+      <DiceRoller 
+        isOpen={pendingChoice !== null}
+        riskLevel={pendingChoice?.risk || "risky"}
+        onResult={(result) => {
+          if (pendingChoice) {
+            executeChoice(pendingChoice.id, result);
+          }
+        }}
+        onCancel={() => setPendingChoice(null)}
+      />
     </div>
   );
 }
@@ -1149,7 +1329,55 @@ function PlayContent() {
   const themeClass = genre?.toLowerCase().includes("fantasy") ? "theme-fantasy" : "theme-cyberpunk";
 
   return (
-    <div className={`split-layout ${themeClass}`} style={{ maxWidth: "100%", padding: "1rem 2rem" }}>
+    <div className={`split-layout ${themeClass}`} style={{ maxWidth: "100%", padding: "1rem 2rem", position: "relative" }}>
+      {/* --- Death Screen Overlay --- */}
+      <AnimatePresence>
+        {character.hp <= 0 && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            style={{
+              position: "fixed",
+              top: 0, left: 0, width: "100vw", height: "100vh",
+              background: "radial-gradient(circle at center, rgba(150,0,0,0.8) 0%, rgba(10,0,0,1) 100%)",
+              zIndex: 9999,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              backdropFilter: "blur(10px)"
+            }}
+          >
+            <motion.h1 
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ delay: 0.5, duration: 1 }}
+              style={{ fontSize: "5rem", color: "var(--accent-danger)", textShadow: "0 0 20px red", margin: 0, fontFamily: "var(--font-mono)" }}
+            >
+              YOU DIED
+            </motion.h1>
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 1.5 }}
+              style={{ color: "rgba(255,255,255,0.7)", marginTop: "1rem", fontSize: "1.2rem" }}
+            >
+              Hành trình của bạn đã kết thúc tại đây...
+            </motion.p>
+            <motion.button
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 2.5 }}
+              className="action-button"
+              style={{ marginTop: "3rem", background: "rgba(255,0,0,0.2)", border: "1px solid red" }}
+              onClick={() => window.location.href = "/"}
+            >
+              BẮT ĐẦU LẠI
+            </motion.button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* --- AAA Backgrounds --- */}
       <div className="hex-grid-bg" style={{ opacity: 0.2 }} />
       <div className="scanlines" style={{ opacity: 0.15 }} />
