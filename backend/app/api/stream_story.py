@@ -4,7 +4,7 @@ from fastapi.responses import StreamingResponse
 from datetime import datetime
 
 from app.core.database import get_mongo_db, save_story_memory
-from app.models.schemas import PlayerActionRequest, ChapterContent, StoryChoice
+from app.models.schemas import PlayerActionRequest, ChapterContent, StoryChoice, StoryConfig
 from app.graph.workflow import story_pipeline
 from app.api.story import _preprocess_action
 from app.core.state_merger import apply_state_changes
@@ -29,8 +29,8 @@ async def stream_story_turn(request: PlayerActionRequest):
     last_chapter = chapters[-1]
     new_chapter_number = last_chapter["chapter_number"] + 1
 
-    character = story.get("character", {})
-    action_context = await _preprocess_action(request, character)
+    config = StoryConfig(**story)
+    action_context = _preprocess_action(request, config)
 
     initial_state = {
         "story_config": story,
