@@ -54,6 +54,39 @@
   --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
 }
 
+/* ============================================================
+   DYNAMIC THEMES
+   ============================================================ */
+
+.theme-fantasy {
+  --bg-base: #0f0a05;
+  --bg-primary: #1a1208;
+  --bg-secondary: #261a0d;
+  --bg-tertiary: #332414;
+
+  --bg-glass-heavy: rgba(26, 18, 8, 0.85);
+  --bg-glass-medium: rgba(38, 26, 13, 0.6);
+  --bg-glass-light: rgba(51, 36, 20, 0.4);
+  --bg-glass-hover: rgba(77, 51, 25, 0.5);
+
+  --glass-border: rgba(212, 175, 55, 0.15); /* Gold border */
+  --glass-highlight: rgba(212, 175, 55, 0.2);
+  --glass-border-glow: rgba(212, 175, 55, 0.3);
+
+  --accent-primary: #d4af37; /* Antique Gold */
+  --accent-primary-glow: rgba(212, 175, 55, 0.6);
+  --accent-secondary: #b85c38; /* Rust/Copper */
+  --accent-secondary-glow: rgba(184, 92, 56, 0.6);
+  --accent-tertiary: #5c8d89; /* Sage Green */
+
+  --text-primary: #f4e8d1; /* Parchment white */
+  --text-secondary: #c2b291;
+  --text-muted: #8c7c5a;
+  --text-accent: #ffd700;
+
+  --font-display: 'Lora', 'Merriweather', serif; /* Classic font for HUD too */
+}
+
 /* --- Global Reset & Base --- */
 * {
   box-sizing: border-box;

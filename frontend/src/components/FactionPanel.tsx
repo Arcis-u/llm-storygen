@@ -164,7 +164,10 @@ export default function FactionPanel({ storyId, organizations, onJoinAction }: P
           <button 
             className="action-button" 
             style={{ marginTop: "1rem", width: "100%", justifyContent: "center" }}
-            onClick={() => onJoinAction(org.org_id)}
+            onClick={() => {
+              import("@/lib/audio").then(({ audioEngine }) => audioEngine.playSfx("success"));
+              onJoinAction(org.org_id);
+            }}
           >
             TÌM HIỂU
           </button>

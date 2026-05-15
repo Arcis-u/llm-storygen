@@ -532,6 +532,7 @@ function StoryPanel() {
 
   const handleChoice = async (choiceId: number) => {
     if (!storyId || isBusy) return;
+    import("@/lib/audio").then(({ audioEngine }) => audioEngine.playSfx("click"));
     setLoading(true);
     setIsProcessing(true);
     try {
@@ -552,6 +553,7 @@ function StoryPanel() {
 
   const handleCustomAction = async () => {
     if (!storyId || isBusy || !customInput.trim()) return;
+    import("@/lib/audio").then(({ audioEngine }) => audioEngine.playSfx("click"));
     setLoading(true);
     setIsProcessing(true);
     try {
@@ -1003,11 +1005,11 @@ function StoryPanel() {
 function PlayContent() {
   const params = useSearchParams();
   const storyId = params.get("id") || "";
-  const { setStoryId, setPhase, setCharacter, setQuests, setLocations, setWorldOrganizations, setMarketItems, setPlotTriggers, setIsProcessing } = useStoryStore();
+  const { setStoryId, setPhase, setCharacter, setQuests, setLocations, setWorldOrganizations, setMarketItems, setPlotTriggers, setIsProcessing, setGenre } = useStoryStore();
   const [mainTab, setMainTab] = useState<"story" | "map" | "relations" | "timeline" | "market" | "factions">("story");
   
   // Connect to store for the other tabs
-  const { locations, character, plotTriggers, chapters, marketItems, worldOrganizations, updateFullState, setLoading, setError, isLoading, isProcessing } = useStoryStore();
+  const { locations, character, plotTriggers, chapters, marketItems, worldOrganizations, updateFullState, setLoading, setError, isLoading, isProcessing, genre } = useStoryStore();
 
   useEffect(() => {
     if (storyId) {
@@ -1018,12 +1020,18 @@ function PlayContent() {
       getStoryState(storyId)
         .then((data) => {
           if (data.config) {
+            if (data.config.genre) setGenre(data.config.genre);
             setCharacter(data.config.character);
             setQuests(data.config.quests || []);
             setLocations(data.config.locations || []);
             setWorldOrganizations(data.config.available_organizations || []);
             setMarketItems(data.config.available_shop_items || []);
             setPlotTriggers(data.config.plot_triggers || []);
+            
+            // Start BGM based on genre
+            import("@/lib/audio").then(({ audioEngine }) => {
+              audioEngine.playBGM(data.config.genre || "Cyberpunk");
+            });
           }
           if (data.chapters && data.chapters.length > 0) {
             useStoryStore.setState({ chapters: data.chapters });
@@ -1047,6 +1055,7 @@ function PlayContent() {
   // Poll backend when processing is detected (e.g. after page refresh mid-generation)
   useEffect(() => {
     if (!isProcessing || !storyId) return;
+
     const interval = setInterval(async () => {
       try {
         const data = await getStoryState(storyId);
@@ -1054,6 +1063,7 @@ function PlayContent() {
           // Generation finished! Reload all data.
           clearInterval(interval);
           if (data.config) {
+            if (data.config.genre) setGenre(data.config.genre);
             setCharacter(data.config.character);
             setQuests(data.config.quests || []);
             setLocations(data.config.locations || []);
@@ -1108,6 +1118,7 @@ function PlayContent() {
     }
 
     // --- Narrative Actions (Move) ---
+    import("@/lib/audio").then(({ audioEngine }) => audioEngine.playSfx("click"));
     setLoading(true);
     setIsProcessing(true);
     
@@ -1135,8 +1146,13 @@ function PlayContent() {
     }
   };
 
+  const themeClass = genre?.toLowerCase().includes("fantasy") ? "theme-fantasy" : "theme-cyberpunk";
+
   return (
-    <div className="split-layout" style={{ maxWidth: "100%", padding: "1rem 2rem" }}>
+    <div className={`split-layout ${themeClass}`} style={{ maxWidth: "100%", padding: "1rem 2rem" }}>
+      {/* --- AAA Backgrounds --- */}
+      <div className="hex-grid-bg" style={{ opacity: 0.2 }} />
+      <div className="scanlines" style={{ opacity: 0.15 }} />idth: "100%", padding: "1rem 2rem" }}>
       {/* --- AAA Backgrounds --- */}
       <div className="hex-grid-bg" style={{ opacity: 0.2 }} />
       <div className="scanlines" style={{ opacity: 0.15 }} />

@@ -186,6 +186,7 @@ interface StoryStore {
   isLoading: boolean;
   isProcessing: boolean;
   error: string | null;
+  genre: string;
 
   // --- Story Phase ---
   phase: 'idle' | 'creating' | 'customizing' | 'playing';
@@ -207,6 +208,7 @@ interface StoryStore {
   // --- Actions ---
   setPhase: (phase: StoryStore['phase']) => void;
   setStoryId: (id: string) => void;
+  setGenre: (genre: string) => void;
   setLoading: (loading: boolean) => void;
   setIsProcessing: (processing: boolean) => void;
   setError: (error: string | null) => void;
@@ -257,6 +259,7 @@ export const useStoryStore = create<StoryStore>((set) => ({
   isLoading: false,
   isProcessing: false,
   error: null,
+  genre: 'Cyberpunk',
   phase: 'idle',
   character: initialCharacter,
   chapters: [],
@@ -269,6 +272,7 @@ export const useStoryStore = create<StoryStore>((set) => ({
 
   setPhase: (phase) => set({ phase }),
   setStoryId: (id) => set({ storyId: id }),
+  setGenre: (genre) => set({ genre }),
   setLoading: (loading) => set({ isLoading: loading }),
   setIsProcessing: (processing) => set({ isProcessing: processing }),
   setError: (error) => set({ error }),
