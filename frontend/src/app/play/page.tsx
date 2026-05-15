@@ -659,7 +659,12 @@ function StoryPanel() {
           }
         },
         (chapter, config) => {
-          updateFullState({ story_id: storyId!, chapter, config });
+          updateFullState({
+            chapter,
+            character: config?.character ?? {},
+            quests: config?.quests ?? [],
+            locations: config?.locations ?? [],
+          });
           setIsProcessing(false);
           setStreamingText("");
         },
@@ -700,7 +705,12 @@ function StoryPanel() {
           }
         },
         (chapter, config) => {
-          updateFullState({ story_id: storyId, chapter, config });
+          updateFullState({
+            chapter,
+            character: config?.character ?? {},
+            quests: config?.quests ?? [],
+            locations: config?.locations ?? [],
+          });
           setCustomInput("");
           setIsProcessing(false);
           setStreamingText("");

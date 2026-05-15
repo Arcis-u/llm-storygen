@@ -32,6 +32,7 @@ from app.models.schemas import (
     StorySettingsUpdate,
     InstantActionRequest,
     IntentActionRequest,
+    CraftActionRequest,
 )
 
 router = APIRouter(prefix="/api/story", tags=["story"])
