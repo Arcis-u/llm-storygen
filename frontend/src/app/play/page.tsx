@@ -1152,9 +1152,6 @@ function PlayContent() {
     <div className={`split-layout ${themeClass}`} style={{ maxWidth: "100%", padding: "1rem 2rem" }}>
       {/* --- AAA Backgrounds --- */}
       <div className="hex-grid-bg" style={{ opacity: 0.2 }} />
-      <div className="scanlines" style={{ opacity: 0.15 }} />idth: "100%", padding: "1rem 2rem" }}>
-      {/* --- AAA Backgrounds --- */}
-      <div className="hex-grid-bg" style={{ opacity: 0.2 }} />
       <div className="scanlines" style={{ opacity: 0.15 }} />
 
       {/* LEFT COLUMN: HUD Dashboard */}

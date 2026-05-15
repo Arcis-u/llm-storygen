@@ -61,6 +61,12 @@ class AudioEngine {
     }
   }
 
+  public playBGM(_genre: string) {
+    // BGM requires real audio files — this is a no-op placeholder.
+    // When audio assets are added to /public/audio/, this will cross-fade BGM tracks.
+    console.log(`[AudioEngine] BGM genre set: ${_genre}`);
+  }
+
   public toggleMute() {
     this.isMuted = !this.isMuted;
     return this.isMuted;
