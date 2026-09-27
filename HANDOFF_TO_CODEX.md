@@ -50,8 +50,31 @@ Hệ thống đã hoàn tất trọn vẹn **Phase 1, Phase 2, Phase 3** và đ�
 
 ---
 
-## 📜 3. HỒ SƠ NGỮ CẢNH HỘI THOẠI ĐẦY ĐỦ (FULL CONTEXT LOG)
+## 📜 3. TÀI LIỆU THAM KHẢO THÊM (OPTIONAL)
 
-Nếu Codex cần tra cứu lại toàn bộ lịch sử trao đổi, các lỗi từng gặp, tư duy kiến trúc và mọi yêu cầu trước đó từ người dùng, hãy đọc trực tiếp file:
-- **[CONVERSATION_HISTORY.md](./CONVERSATION_HISTORY.md)**: Chứa toàn bộ các yêu cầu của User từ đầu đến nay, các giải pháp đã thử nghiệm, log sửa lỗi và các trao đổi chi tiết cùng Antigravity.
+- Chủ yếu hãy đọc trực tiếp **codebase** (`backend/` và `frontend/`) kết hợp với `README.md` để nắm kiến trúc.
+- Nếu thực sự cần tra cứu lại một ngữ cảnh cụ thể nào trong quá khứ, bạn có thể tham khảo tệp `CONVERSATION_HISTORY.md`.
+
+---
+
+## 🎯 4. PROMPT BÀN GIAO CHO CODEX
+
+```markdown
+Chào Codex, đây là dự án được chuyển giao tiếp nối từ Antigravity.
+Tên dự án: Nexus Tale - AI-Powered Interactive RPG Storyteller (Next.js 14, FastAPI, LangGraph, Qdrant, MongoDB).
+
+Bạn chỉ cần đọc trực tiếp codebase và file HANDOFF_TO_CODEX.md để nắm bắt nhanh hệ thống (file CONVERSATION_HISTORY.md chỉ cần đọc khi thực sự muốn tra cứu sâu ngữ cảnh cũ).
+
+NHIỆM VỤ CỦA BẠN:
+Tôi muốn bạn tự do thỏa sức sáng tạo để nâng tầm dự án này:
+- Nâng cấp UI/UX: biến giao diện thành một trải nghiệm đỉnh cao, thẩm mỹ, cuốn hút và sống động.
+- Mở rộng gameplay: đề xuất và bổ sung các tính năng thú vị, bất ngờ, làm sâu sắc thêm trải nghiệm nhập vai.
+- Tối ưu & Thắt chặt logic: rà soát, dọn dẹp điểm nghẽn hiệu năng, đảm bảo mọi cơ chế vận hành trơn tru và logic từ frontend tới backend.
+
+YÊU CẦU ĐẶC BIỆT VỀ QUY TRÌNH PHẢN BIỆN (CRITICAL THINKING):
+1. Không vội vàng làm ngay. Hãy nhìn nhận mọi ý tưởng dưới đa góc nhìn (Người chơi khó tính, Game Designer, Kỹ sư hệ thống).
+2. Phản biện thật sâu và kỹ: liên tục lặp lại quá trình tìm kẽ hở, lật ngược vấn đề, vạch ra các rủi ro, điểm phi logic hoặc thiếu thực tế của từng ý tưởng.
+3. Chỉ khi ý tưởng đã vượt qua các vòng chất vấn, đạt tiêu chí THỰC TẾ, HỢP LÝ, KHẢ THI và THỰC SỰ PHÙ HỢP thì mới thống nhất và bắt tay vào triển khai.
+```
+
 
