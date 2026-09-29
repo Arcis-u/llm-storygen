@@ -29,3 +29,8 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Local QA output and isolated tool cache
+.tool-cache/
+.playwright-cli/
+output/

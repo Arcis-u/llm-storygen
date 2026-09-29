@@ -37,11 +37,13 @@ async def lifespan(app: FastAPI):
     print("=" * 60)
     print("  Interactive Story AI - Starting up...")
     print("=" * 60)
-    await init_databases()
-    await init_admin()
-    yield
-    await close_databases()
-    print("  Interactive Story AI - Shut down complete.")
+    try:
+        await init_databases()
+        await init_admin()
+        yield
+    finally:
+        await close_databases()
+        print("  Interactive Story AI - Shut down complete.")
 
 
 settings = get_settings()
@@ -138,7 +140,8 @@ async def health_check():
 
     try:
         qdrant = get_qdrant()
-        qdrant.get_collections()
+        import asyncio
+        await asyncio.to_thread(qdrant.get_collections)
         health["qdrant"] = "healthy"
     except Exception as e:
         health["qdrant"] = f"unhealthy: {str(e)}"

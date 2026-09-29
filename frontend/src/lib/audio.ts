@@ -3,7 +3,8 @@ class AudioEngine {
   private audioCtx: AudioContext | null = null;
   private currentBgm: HTMLAudioElement | null = null;
   private currentGenre: string | null = null;
-  private fadeInterval: NodeJS.Timeout | null = null;
+  private fadeTimers = new Map<HTMLAudioElement, ReturnType<typeof setInterval>>();
+  private generation = 0;
 
   constructor() {
     // Initialize AudioContext only on client side when needed
@@ -81,78 +82,57 @@ class AudioEngine {
     }
   }
 
-  public playBGM(genre: string) {
+  public playBGM(tone: string) {
     if (typeof window === "undefined" || this.isMuted) return;
-    
-    // Normalize genre
-    const normalizedGenre = genre.toLowerCase().replace(/[^a-z0-9]/g, '');
-    if (this.currentGenre === normalizedGenre) return; // Already playing
-    
-    console.log(`[AudioEngine] BGM changing to: ${normalizedGenre}`);
-    this.currentGenre = normalizedGenre;
-
-    // Fade out current BGM
-    if (this.currentBgm) {
-      const oldBgm = this.currentBgm;
-      this.fadeOut(oldBgm, () => {
-        oldBgm.pause();
-        oldBgm.currentTime = 0;
-      });
-    }
-
-    // Try to load the new BGM track
-    // Convention: put files in /audio/{genre}.mp3
-    // Fallback logic handled gracefully if file is missing (404)
-    const newBgm = new Audio(`/audio/${normalizedGenre}.mp3`);
-    newBgm.loop = true;
-    newBgm.volume = 0;
-    
-    newBgm.play().then(() => {
-      this.currentBgm = newBgm;
-      this.fadeIn(newBgm, 0.3); // Target volume 0.3
-    }).catch(e => {
-      console.warn(`[AudioEngine] BGM track not found or play prevented for: ${normalizedGenre}. Make sure /audio/${normalizedGenre}.mp3 exists!`, e);
-      this.currentGenre = null; // reset if failed
-    });
+    const track = ["ambient", "tense", "combat", "sad", "epic"].includes(tone) ? tone : "ambient";
+    if (this.currentGenre === track) return;
+    const generation = ++this.generation;
+    this.currentGenre = track;
+    const next = new Audio(`/audio/${track}.wav`);
+    next.loop = true; next.volume = 0;
+    next.play().then(() => {
+      if (generation !== this.generation || this.isMuted) { next.pause(); return; }
+      const previous = this.currentBgm;
+      this.currentBgm = next;
+      if (previous) this.fade(previous, 0, () => { previous.pause(); previous.currentTime = 0; });
+      this.fade(next, .3);
+    }).catch(() => { if (generation === this.generation) this.currentGenre = null; });
   }
 
-  private fadeOut(audio: HTMLAudioElement, callback: () => void) {
-    let vol = audio.volume;
-    const fade = setInterval(() => {
-      if (vol > 0.05) {
-        vol -= 0.05;
-        audio.volume = vol;
-      } else {
-        clearInterval(fade);
-        audio.volume = 0;
-        callback();
-      }
-    }, 100);
+  private fade(audio: HTMLAudioElement, target: number, done?: () => void) {
+    const existing = this.fadeTimers.get(audio);
+    if (existing) clearInterval(existing);
+    const step = (target - audio.volume) / 12;
+    let ticks = 0;
+    const timer = setInterval(() => {
+      ticks++;
+      audio.volume = Math.max(0, Math.min(1, ticks >= 12 ? target : audio.volume + step));
+      if (ticks >= 12) { clearInterval(timer); this.fadeTimers.delete(audio); done?.(); }
+    }, 60);
+    this.fadeTimers.set(audio, timer);
   }
 
-  private fadeIn(audio: HTMLAudioElement, targetVolume: number) {
-    let vol = 0;
-    audio.volume = vol;
-    const fade = setInterval(() => {
-      if (vol < targetVolume - 0.05) {
-        vol += 0.05;
-        audio.volume = vol;
-      } else {
-        clearInterval(fade);
-        audio.volume = targetVolume;
-      }
-    }, 100);
+  public stopBGM() {
+    ++this.generation;
+    this.fadeTimers.forEach((timer, audio) => { clearInterval(timer); audio.pause(); });
+    this.fadeTimers.clear();
+    this.currentBgm?.pause(); this.currentBgm = null; this.currentGenre = null;
   }
 
   public toggleMute() {
     this.isMuted = !this.isMuted;
-    if (this.isMuted && this.currentBgm) {
-      this.currentBgm.pause();
+    if (this.isMuted) {
+      this.fadeTimers.forEach((timer, audio) => { clearInterval(timer); audio.pause(); });
+      this.fadeTimers.clear();
+      this.currentBgm?.pause();
     } else if (!this.isMuted && this.currentBgm) {
-      this.currentBgm.play().catch(e => console.warn(e));
+      this.currentBgm.volume = .3;
+      this.currentBgm.play().catch(() => {});
     }
     return this.isMuted;
   }
+
+  public getMuted() { return this.isMuted; }
 }
 
 export const audioEngine = new AudioEngine();

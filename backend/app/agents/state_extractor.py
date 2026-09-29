@@ -48,6 +48,8 @@ class TraitChange(BaseModel):
     change_amount: float = Field(description="Positive or negative change to the trait value.")
 
 class StateDiff(BaseModel):
+    hp_change: float = Field(default=0, description="Health delta from actual injuries or recovery; negative means damage.")
+    energy_change: float = Field(default=0, description="Energy delta from actual exertion or rest.")
     psychology: PsychologyChange
     trait_changes: list[TraitChange] = Field(default_factory=list, description="Changes to custom character traits (e.g. Lý trí, Ám ảnh, Thể lực).")
     economy: EconomyChange

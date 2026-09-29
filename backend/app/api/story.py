@@ -4,7 +4,7 @@ Handles: creation (with World Builder), customization, gameplay turns (with API 
 pre-processing logic for buy/move/join, State Merger integration), and state retrieval.
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
 from datetime import datetime
 from typing import Optional
 import uuid
@@ -35,10 +35,11 @@ from app.models.schemas import (
     CraftActionRequest,
 )
 
-router = APIRouter(prefix="/api/story", tags=["story"])
+from app.core.story_access import require_story_access, exclusive_story_mutation
+from app.core.turn_rules import prepare_action, initial_turn_state
 
-# ─── In-memory lock set to prevent concurrent turns on same story ───
-_active_locks: set[str] = set()
+router = APIRouter(prefix="/api/story", tags=["story"], dependencies=[Depends(require_story_access)])
+
 
 
 # ============================================================
@@ -210,6 +211,7 @@ async def create_story(request: CreateStoryRequest, user: Optional[dict] = Depen
 # PUT /customize — Pre-game Customization
 # ============================================================
 @router.put("/customize")
+@exclusive_story_mutation
 async def customize_story(request: CustomizeStoryRequest):
     """
     Phase 2 (Pre-game): User customizes traits, abilities, plot triggers, and map.
@@ -220,6 +222,9 @@ async def customize_story(request: CustomizeStoryRequest):
     story = await db.stories.find_one({"story_id": request.story_id})
     if not story:
         raise HTTPException(status_code=404, detail="Story not found")
+
+    if story.get("current_chapter", 0) > 0:
+        raise HTTPException(409, "Nhân vật đã bắt đầu hành trình; không thể tùy chỉnh lại trạng thái ban đầu.")
 
     update_data = {
         "character.traits": [t.model_dump() for t in request.traits],
@@ -248,7 +253,8 @@ async def customize_story(request: CustomizeStoryRequest):
 # POST /start — Generate Opening Chapter (Chapter 1)
 # ============================================================
 @router.post("/start/{story_id}")
-async def start_story(story_id: str):
+@exclusive_story_mutation
+async def start_story(story_id: str, background_tasks: BackgroundTasks):
     """
     Phase 3 (Game Start): Generate the opening chapter.
     Called ONCE after customization, before gameplay begins.
@@ -265,6 +271,8 @@ async def start_story(story_id: str):
     if existing:
         existing.pop("_id", None)
         story.pop("_id", None)
+        story.pop("mutation_token", None)
+        story.pop("mutation_until", None)
         return {
             "story_id": story_id,
             "chapter": existing,
@@ -285,245 +293,46 @@ async def start_story(story_id: str):
         f"establishes the world atmosphere, and ends with a hook that makes the player want to continue."
     )
 
-    initial_state = {
-        "story_config": story,
-        "player_action": {
-            "story_id": story_id,
-            "action_type": "custom",
-            "custom_action": "Begin the story.",
-        },
-        "action_context": action_context,
-        "chapter_number": 1,
-        "is_god_mode": story.get("is_god_mode", False),
-        "relevant_memories": [],
-        "director_plan": "",
-        "web_search_results": [],
-        "plot_triggers_activated": [],
-        "chapter_title": "",
-        "chapter_content": "",
-        "chapter_summary": "",
-        "state_changes": {},
-        "is_game_over": False,
-        "choices": [],
-        "error": None,
-    }
-
-    try:
-        final_state = await story_pipeline.ainvoke(initial_state)
-    except Exception as e:
-        print(f"[ERROR] Opening chapter generation failed: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Failed to generate opening chapter: {str(e)}")
-
-    chapter_title = final_state.get("chapter_title", "Chương 1")
-    chapter_content = final_state.get("chapter_content", "The story begins...")
-    chapter_summary = final_state.get("chapter_summary", "The story begins.")
-    choices = final_state.get("choices", [])
-    state_changes = final_state.get("state_changes", {})
-
-    new_chapter = ChapterContent(
-        story_id=story_id,
-        chapter_number=1,
-        chapter_title=chapter_title,
-        content=chapter_content,
-        summary=chapter_summary,
-        tone=final_state.get("tone", "ambient"),
-        choices=[StoryChoice(**c) for c in choices] if choices else [],
-    )
-
-    await db.chapters.insert_one(new_chapter.model_dump())
-
-    # Apply state changes
-    if state_changes:
-        await apply_state_changes(
-            story_id=story_id,
-            state_changes=state_changes,
-            chapter_number=1,
-        )
-
-    # Update current chapter counter
-    await db.stories.update_one(
-        {"story_id": story_id},
-        {"$set": {"current_chapter": 1, "updated_at": datetime.utcnow()}}
-    )
-
-    # Save to vector memory
-    try:
-        summary_embedding = await get_text_embedding(chapter_summary)
-        await save_story_memory(
-            story_id=story_id,
-            chapter_number=1,
-            text_content=chapter_content[:2000],
-            embedding_vector=summary_embedding,
-        )
-    except Exception as e:
-        print(f"[WARNING] Failed to save opening memory: {e}")
-
-    # Reload config after merge
-    updated_story = await db.stories.find_one({"story_id": story_id})
-    updated_story.pop("_id", None)
-
-    return {
-        "story_id": story_id,
-        "chapter": new_chapter.model_dump(),
-        "config": updated_story,
-    }
+    from app.core.turn_service import persist_turn, index_chapter
+    action = PlayerActionRequest(story_id=story_id, action_type="custom", custom_action="Begin the story.")
+    final_state = await story_pipeline.ainvoke(initial_turn_state(story, action, action_context))
+    new_chapter, updated_config = await persist_turn(action, story, final_state, {})
+    background_tasks.add_task(index_chapter, new_chapter)
+    return {"story_id": story_id, "chapter": new_chapter.model_dump(), "config": updated_config.model_dump()}
 
 
 # ============================================================
 # POST /turn — Gameplay Loop (The Heart of the Engine)
 # ============================================================
 @router.post("/turn")
-async def process_turn(request: PlayerActionRequest):
-    """
-    Phase 3 (Gameplay Loop): Process a player's action and generate the next chapter.
-    Includes: API Lock, Pre-processing (buy/move/join), LangGraph Pipeline, State Merger.
-    """
+@exclusive_story_mutation
+async def process_turn(request: PlayerActionRequest, background_tasks: BackgroundTasks):
+    from app.core.turn_service import persist_turn, index_chapter
     db = await get_mongo_db()
-
-    # ─── 1. API LOCK: Prevent concurrent turns ───
-    if request.story_id in _active_locks:
-        raise HTTPException(status_code=429, detail="Another turn is being processed. Please wait.")
-    _active_locks.add(request.story_id)
-
-    try:
-        story = await db.stories.find_one({"story_id": request.story_id})
-        if not story:
-            raise HTTPException(status_code=404, detail="Story not found")
-
-        story_config = StoryConfig(**story)
-
-        # ─── Check if story is already over ───
-        if story.get("is_ended", False):
-            raise HTTPException(status_code=400, detail="This story has ended. Game Over.")
-
-        new_chapter_number = story_config.current_chapter + 1
-
-        # ─── 2. PRE-PROCESS: Handle buy/move/join with PYTHON LOGIC ───
-        action_context = _preprocess_action(request, story_config)
-
-        # ─── 3. Build Initial Graph State ───
-        initial_state = {
-            "story_config": story,
-            "player_action": request.model_dump(),
-            "action_context": action_context,
-            "chapter_number": new_chapter_number,
-            "is_god_mode": story.get("is_god_mode", False),
-            "relevant_memories": [],
-            "director_plan": "",
-            "web_search_results": [],
-            "plot_triggers_activated": [],
-            "chapter_title": "",
-            "chapter_content": "",
-            "chapter_summary": "",
-            "state_changes": {},
-            "is_game_over": False,
-            "choices": [],
-            "error": None,
-        }
-
-        # ─── 4. Invoke LangGraph Pipeline ───
-        try:
-            final_state = await story_pipeline.ainvoke(initial_state)
-        except Exception as e:
-            print(f"[ERROR] Pipeline failed: {e}")
-            import traceback
-            traceback.print_exc()
-            raise HTTPException(status_code=500, detail=f"Failed to generate chapter: {str(e)}")
-
-        # ─── 5. Extract Output ───
-        chapter_title = final_state.get("chapter_title", f"Chương {new_chapter_number}")
-        chapter_content = final_state.get("chapter_content", "Failed to generate text.")
-        chapter_summary = final_state.get("chapter_summary", "")
-        choices = final_state.get("choices", [])
-        state_changes = final_state.get("state_changes", {})
-        is_game_over = final_state.get("is_game_over", False)
-
-        new_chapter = ChapterContent(
-            story_id=request.story_id,
-            chapter_number=new_chapter_number,
-            chapter_title=chapter_title,
-            content=chapter_content,
-            summary=chapter_summary,
-            tone=final_state.get("tone", "ambient"),
-            choices=[StoryChoice(**c) for c in choices] if choices else [],
-        )
-
-        # ─── 6. Save Chapter to MongoDB ───
-        await db.chapters.insert_one(new_chapter.model_dump())
-
-        # ─── 6.5. Hardcode Location Update if Move Action ───
-        if request.action_type == "move":
-            target = request.target_location_id or request.custom_action
-            if target:
-                state_changes["current_location_id"] = target
-                print(f"[FALLBACK] Forced current_location_id to {target}")
-
-        # ─── 7. Apply State Changes via Robust State Merger ───
-        merge_result = await apply_state_changes(
-            story_id=request.story_id,
-            state_changes=state_changes,
-            chapter_number=new_chapter_number,
-        )
-
-        # ─── 8. Handle Game Over ───
-        if is_game_over:
-            await db.stories.update_one(
-                {"story_id": request.story_id},
-                {"$set": {"is_ended": True}}
-            )
-
-        # ─── 9. Save Chapter Text to Qdrant (Vector Memory) ───
-        # We save the RAW TEXT (not just summary) so Director can retrieve details later
-        try:
-            # Save summary embedding for fast similarity search
-            summary_embedding = await get_text_embedding(chapter_summary)
-            await save_story_memory(
-                story_id=request.story_id,
-                chapter_number=new_chapter_number,
-                text_content=chapter_content[:2000],  # Store raw text (capped)
-                embedding_vector=summary_embedding,
-            )
-            # Also save a second vector with the full chapter for detail retrieval
-            if len(chapter_content) > 500:
-                content_embedding = await get_text_embedding(chapter_content[:1000])
-                await save_story_memory(
-                    story_id=request.story_id,
-                    chapter_number=new_chapter_number,
-                    text_content=chapter_content,
-                    embedding_vector=content_embedding,
-                )
-        except Exception as e:
-            print(f"[WARNING] Failed to save memory to Qdrant: {e}")
-
-        # ─── 10. Return Response ───
-        # Reload the latest config from DB (after merge)
-        updated_story = await db.stories.find_one({"story_id": request.story_id})
-        updated_config = StoryConfig(**updated_story) if updated_story else story_config
-
-        return {
-            "story_id": request.story_id,
-            "chapter": new_chapter.model_dump(),
-            "character": updated_config.character.model_dump(),
-            "quests": [q.model_dump() for q in updated_config.quests],
-            "locations": [loc.model_dump() for loc in updated_config.locations],
-            "organizations": [o.model_dump() for o in updated_config.available_organizations],
-            "shop_items": [s.model_dump() for s in updated_config.available_shop_items],
-            "plot_triggers": [p.model_dump() for p in updated_config.plot_triggers],
-            "is_game_over": is_game_over,
-        }
-
-    finally:
-        # ─── Always release the lock ───
-        _active_locks.discard(request.story_id)
+    story = await db.stories.find_one({"story_id": request.story_id})
+    previous = await db.chapters.find_one({"story_id": request.story_id, "chapter_number": story.get("current_chapter", 0)})
+    if not previous:
+        raise HTTPException(409, "Hãy tạo chương mở đầu trước.")
+    action, context, decision = prepare_action(request, story, previous)
+    final = await story_pipeline.ainvoke(initial_turn_state(story, action, context, previous))
+    chapter, config = await persist_turn(action, story, final, decision)
+    background_tasks.add_task(index_chapter, chapter)
+    return {"story_id": request.story_id, "chapter": chapter.model_dump(),
+            "character": config.character.model_dump(), "quests": [q.model_dump() for q in config.quests],
+            "locations": [x.model_dump() for x in config.locations],
+            "organizations": [x.model_dump() for x in config.available_organizations],
+            "shop_items": [x.model_dump() for x in config.available_shop_items],
+            "plot_triggers": [x.model_dump() for x in config.plot_triggers], "is_game_over": config.is_ended}
 
 
 # ============================================================
 # PATCH /god-mode — Toggle God Mode
 # ============================================================
 @router.patch("/god-mode/{story_id}")
-async def toggle_god_mode(story_id: str, enabled: bool = True):
+@exclusive_story_mutation
+async def toggle_god_mode(story_id: str, enabled: bool = True, user: dict = Depends(get_current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(403, "Admin access required")
     """Toggle God Mode on/off for a story."""
     db = await get_mongo_db()
     result = await db.stories.update_one(
@@ -556,13 +365,14 @@ async def get_story_state(story_id: str):
         ch.pop("_id", None)
 
     story.pop("_id", None)
+    story.pop("mutation_token", None)
 
     return {
         "story_id": story_id,
         "config": story,
         "chapters": chapters,
         "is_game_over": story.get("is_ended", False),
-        "is_processing": story_id in _active_locks,
+        "is_processing": story.get("mutation_until", datetime.min) > datetime.utcnow(),
     }
 
 
@@ -584,120 +394,8 @@ async def get_all_chapters(story_id: str):
     return {"story_id": story_id, "chapters": chapters}
 
 
-# ============================================================
-# HELPER: Pre-process Actions (Python Logic Before AI)
-# ============================================================
-
-def _preprocess_action(request: PlayerActionRequest, config: StoryConfig) -> str:
-    """
-    Converts raw player actions into a natural-language context string for the Director.
-    For buy/move/join actions, also validates and applies immediate state changes.
-    """
-    action_type = request.action_type
-
-    if action_type == "choice":
-        # Look up the choice text from the previous chapter's choices
-        base_context = f"Player selected choice #{request.choice_id}."
-        if request.dice_result is not None:
-            dice = request.dice_result
-            if dice == 1:
-                base_context += f"\n[RNG OUTCOME: D20 Roll = {dice} (CRITICAL FAILURE)]. Mệnh lệnh cho Director: Hành động này RÚT CỤC ĐÃ THẤT BẠI THẢM HẠI do xui xẻo. Hãy miêu tả hậu quả tồi tệ nhất có thể xảy ra, tổn thương nặng nề đến cơ thể hoặc tinh thần (giảm mạnh HP/Energy). Đừng khoan nhượng."
-            elif 2 <= dice <= 9:
-                base_context += f"\n[RNG OUTCOME: D20 Roll = {dice} (FAILURE)]. Mệnh lệnh cho Director: Hành động này ĐÃ THẤT BẠI. Hãy miêu tả hậu quả tiêu cực, sai lầm, hoặc bị thương nhẹ (giảm HP)."
-            elif 10 <= dice <= 19:
-                base_context += f"\n[RNG OUTCOME: D20 Roll = {dice} (SUCCESS)]. Mệnh lệnh cho Director: Hành động này ĐÃ THÀNH CÔNG. Hãy miêu tả người chơi vượt qua thử thách một cách suôn sẻ."
-            elif dice == 20:
-                base_context += f"\n[RNG OUTCOME: D20 Roll = {dice} (CRITICAL SUCCESS)]. Mệnh lệnh cho Director: Hành động này ĐÃ THÀNH CÔNG RỰC RỠ. Hãy miêu tả một phép màu hoặc sự thể hiện xuất thần, mang lại phần thưởng ngoài mong đợi."
-        return base_context
-
-    elif action_type == "custom":
-        base_context = f"Player's custom action: \"{request.custom_action}\""
-        if request.dice_result is not None:
-            dice = request.dice_result
-            if dice == 1:
-                base_context += f"\n[RNG OUTCOME: D20 Roll = {dice} (CRITICAL FAILURE)]. Mệnh lệnh cho Director: Hành động này RÚT CỤC ĐÃ THẤT BẠI THẢM HẠI do xui xẻo. Hãy miêu tả hậu quả tồi tệ nhất có thể xảy ra, tổn thương nặng nề đến cơ thể hoặc tinh thần (giảm mạnh HP/Energy). Đừng khoan nhượng."
-            elif 2 <= dice <= 9:
-                base_context += f"\n[RNG OUTCOME: D20 Roll = {dice} (FAILURE)]. Mệnh lệnh cho Director: Hành động này ĐÃ THẤT BẠI. Hãy miêu tả hậu quả tiêu cực, sai lầm, hoặc bị thương nhẹ (giảm HP)."
-            elif 10 <= dice <= 19:
-                base_context += f"\n[RNG OUTCOME: D20 Roll = {dice} (SUCCESS)]. Mệnh lệnh cho Director: Hành động này ĐÃ THÀNH CÔNG. Hãy miêu tả người chơi vượt qua thử thách một cách suôn sẻ."
-            elif dice == 20:
-                base_context += f"\n[RNG OUTCOME: D20 Roll = {dice} (CRITICAL SUCCESS)]. Mệnh lệnh cho Director: Hành động này ĐÃ THÀNH CÔNG RỰC RỠ. Hãy miêu tả một phép màu hoặc sự thể hiện xuất thần, mang lại phần thưởng ngoài mong đợi."
-        return base_context
-
-    elif action_type == "move":
-        target_id = request.target_location_id or request.custom_action
-        target_loc = next((loc for loc in config.locations if loc.location_id == target_id), None)
-        if target_loc:
-            if not target_loc.is_unlocked:
-                return f"Player tried to move to {target_loc.name}, but it is LOCKED. Describe why they can't enter."
-            return (
-                f"Player is traveling to \"{target_loc.name}\".\n"
-                f"Description: {target_loc.description}\n"
-                f"Function: {target_loc.function}\n"
-                f"Benefits: {target_loc.benefits}\n"
-                f"Risks: {target_loc.risks}\n"
-                f"Describe the journey and arrival. MUST SET current_location_id to '{target_loc.location_id}' in the state changes output."
-            )
-        return f"Player tried to move to unknown location '{target_id}'."
-
-    elif action_type == "buy_item":
-        item_id = request.item_id or request.custom_action
-        item = next((it for it in config.available_shop_items if it.item_id == item_id), None)
-        if item:
-            player_money = config.character.economy.currencies.get(item.currency_type, 0)
-            if player_money >= item.price:
-                # Deduction will be handled by State Merger after AI confirms the purchase in the narrative
-                return (
-                    f"Player is attempting to purchase \"{item.name}\" for {item.price} {item.currency_type}.\n"
-                    f"Item description: {item.description}\n"
-                    f"Narrative impact: {item.narrative_impact}\n"
-                    f"Based on the player's current location, describe the transaction scene.\n"
-                    f"If they are NOT at a suitable location (like a market or shop), they cannot buy it right now. Describe their thoughts about needing it instead, and DO NOT deduct money.\n"
-                    f"If they ARE at a suitable location, describe the transaction. The Editor MUST deduct {item.price} {item.currency_type} and add EXACTLY item_id '{item.item_id}' to inventory with quantity 1."
-                )
-            else:
-                return (
-                    f"Player tried to buy \"{item.name}\" ({item.price} {item.currency_type}) "
-                    f"but only has {player_money} {item.currency_type}. "
-                    f"Describe the embarrassing scene of not having enough money."
-                )
-        return f"Player tried to buy unknown item '{item_id}'."
-
-    elif action_type == "join_faction":
-        org_id = request.org_id or request.custom_action
-        org = next((o for o in config.available_organizations if o.org_id == org_id), None)
-        if org:
-            # Check join requirements
-            unmet = []
-            for req_name, req_val in org.join_requirements.items():
-                # Check traits
-                trait = next((t for t in config.character.traits if t.name.lower() == req_name.lower()), None)
-                if trait and trait.current_value < req_val:
-                    unmet.append(f"{req_name} ({trait.current_value}/{req_val})")
-                elif not trait:
-                    unmet.append(f"{req_name} (not found)")
-
-            if unmet:
-                return (
-                    f"Player requested to join \"{org.name}\" but does NOT meet requirements: {', '.join(unmet)}.\n"
-                    f"Describe the rejection scene. The faction representative explains what the player lacks."
-                )
-            return (
-                f"Player is expressing interest in finding out more about or joining \"{org.name}\" ({org.type}).\n"
-                f"Description: {org.public_description}\n"
-                f"Danger Level: {org.danger_level}/10\n"
-                f"Based on the player's current location, describe them trying to make contact, asking around, or taking the first step.\n"
-                f"If they succeed, the Editor MUST add a FactionChange setting status to 'Member' for EXACTLY org_id '{org.org_id}'."
-            )
-        return f"Player tried to join unknown faction '{org_id}'."
-
-    return f"Player performed action: {action_type}"
-
-
-# ============================================================
-# POST /factions/search — Dynamic Faction Searching
-# ============================================================
 @router.post("/factions/search")
+@exclusive_story_mutation
 async def search_faction(request: SearchFactionRequest):
     """
     Search for a real-world organization and adapt it into the game's lore.
@@ -805,6 +503,7 @@ async def search_faction(request: SearchFactionRequest):
 # PUT /{story_id}/settings — Update story metadata
 # ============================================================
 @router.put("/{story_id}/settings")
+@exclusive_story_mutation
 async def update_story_settings(story_id: str, request: StorySettingsUpdate, user: dict = Depends(get_current_user)):
     db = await get_mongo_db()
     
@@ -830,6 +529,7 @@ async def update_story_settings(story_id: str, request: StorySettingsUpdate, use
 # POST /action/instant — UI/System Actions (No AI)
 # ============================================================
 @router.post("/action/instant")
+@exclusive_story_mutation
 async def process_instant_action(request: InstantActionRequest, user: dict = Depends(get_current_user)):
     db = await get_mongo_db()
     story = await db.stories.find_one({"story_id": request.story_id, "user_id": user["user_id"]})
@@ -847,7 +547,7 @@ async def process_instant_action(request: InstantActionRequest, user: dict = Dep
         currency = shop_item.currency_type or "Gold"
         balance = config.character.economy.currencies.get(currency, 0.0)
         
-        if balance < shop_item.price:
+        if shop_item.price < 0 or balance < shop_item.price:
             raise HTTPException(status_code=400, detail="Insufficient funds")
             
         # Deduct money and add item
@@ -860,7 +560,7 @@ async def process_instant_action(request: InstantActionRequest, user: dict = Dep
         else:
             from app.models.schemas import InventoryItem
             config.character.economy.inventory.append(
-                InventoryItem(item_id=item_id, name=shop_item.name, quantity=1)
+                InventoryItem(item_id=item_id, name=shop_item.name, quantity=1, is_crafting_material=shop_item.is_crafting_material)
             )
             
         await db.stories.update_one(
@@ -876,6 +576,7 @@ async def process_instant_action(request: InstantActionRequest, user: dict = Dep
 # POST /action/craft — Crafting System
 # ============================================================
 @router.post("/action/craft")
+@exclusive_story_mutation
 async def process_crafting(request: CraftActionRequest, user: dict = Depends(get_current_user)):
     from app.core.config import get_settings
     from app.core.llm_factory import get_llm
@@ -897,6 +598,9 @@ async def process_crafting(request: CraftActionRequest, user: dict = Depends(get
     if not item1 or not item2:
         raise HTTPException(status_code=400, detail="Missing items in inventory")
         
+    if item1.quantity < 1 or item2.quantity < 1 or (item1.item_id == item2.item_id and item1.quantity < 2):
+        raise HTTPException(400, "Cần đủ số lượng nguyên liệu để chế tác.")
+
     # Generate new item via LLM
     settings = get_settings()
     llm = get_llm(settings.gamemaster_model, temperature=0.7)
@@ -934,8 +638,7 @@ Respond ONLY in valid JSON format:
         
     except Exception as e:
         print(f"[CRAFTING ERROR] {e}")
-        new_name = f"Mảnh vỡ của {item1.name} và {item2.name}"
-        is_mat = False
+        raise HTTPException(502, "Chế tác tạm thời thất bại. Nguyên liệu được giữ nguyên.") from e
 
     # Remove 1 quantity from item1 and item2
     for item in [item1, item2]:
@@ -966,6 +669,7 @@ Respond ONLY in valid JSON format:
 # POST /action/intent — Add Intent to Psychology
 # ============================================================
 @router.post("/action/intent")
+@exclusive_story_mutation
 async def add_character_intent(request: IntentActionRequest, user: dict = Depends(get_current_user)):
     db = await get_mongo_db()
     story = await db.stories.find_one({"story_id": request.story_id, "user_id": user["user_id"]})
@@ -1028,7 +732,7 @@ async def list_my_stories(user: dict = Depends(get_current_user)):
             "created_at": 1,
             "updated_at": 1,
         }
-    ).sort("created_at", -1).to_list(50)
+    ).sort("updated_at", -1).to_list(50)
 
     for s in stories:
         if "created_at" in s:
@@ -1043,6 +747,7 @@ async def list_my_stories(user: dict = Depends(get_current_user)):
 # DELETE /{story_id} — Delete a story
 # ============================================================
 @router.delete("/{story_id}")
+@exclusive_story_mutation
 async def delete_story(story_id: str, user: dict = Depends(get_current_user)):
     """
     Delete a story and all its chapters. 

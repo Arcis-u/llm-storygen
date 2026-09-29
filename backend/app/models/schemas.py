@@ -6,7 +6,7 @@ story configuration, character state, relationships, quests, map, chapters, orga
 
 from __future__ import annotations
 from pydantic import BaseModel, Field
-from typing import Optional, Dict
+from typing import Optional, Dict, Literal
 from datetime import datetime
 from enum import Enum
 
@@ -369,6 +369,7 @@ class ChapterContent(BaseModel):
     """The output of a single story turn/chapter."""
     story_id: str
     chapter_number: int
+    decision: dict = Field(default_factory=dict, description="Server-resolved action that led to this chapter")
     chapter_title: str = Field(default="", description="A short, evocative title for the chapter")
     content: str = Field(description="The full chapter text")
     summary: str = Field(default="", description="AI-generated summary for memory storage")
@@ -422,11 +423,13 @@ class PlayerActionRequest(BaseModel):
         description="'choice', 'custom', 'move', 'buy_item', 'join_faction'"
     )
     choice_id: Optional[int] = Field(default=None)
-    custom_action: Optional[str] = Field(default=None)
+    custom_action: Optional[str] = Field(default=None, max_length=4000)
     target_location_id: Optional[str] = Field(default=None)
     item_id: Optional[str] = Field(default=None)
     org_id: Optional[str] = Field(default=None)
-    dice_result: Optional[int] = Field(default=None, description="1-20 D20 dice result for risky actions")
+    dice_result: Optional[int] = Field(default=None, ge=1, le=20, description="Legacy client field; server rolls independently")
+    approach: Literal["balanced", "careful", "bold"] = "balanced"
+    expected_chapter: Optional[int] = Field(default=None, ge=0)
 
 class CraftActionRequest(BaseModel):
     """Request body for crafting two items together."""

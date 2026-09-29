@@ -4,6 +4,8 @@
  */
 
 import axios from 'axios';
+import type { ChapterContent, StoryConfig } from '@/store/useStoryStore';
+import { consumeStoryStream } from './story-stream';
 
 import { useAuthStore } from '../store/authStore';
 
@@ -77,70 +79,36 @@ export async function submitAction(data: {
   return response.data;
 }
 
+export type TurnAction = {
+  story_id: string; action_type: 'choice' | 'custom' | 'move';
+  choice_id?: number; custom_action?: string; target_location_id?: string;
+  dice_result?: number; expected_chapter?: number; approach?: 'balanced' | 'careful' | 'bold';
+};
 export async function streamAction(
-  data: {
-    story_id: string;
-    action_type: 'choice' | 'custom' | 'move';
-    choice_id?: number;
-    custom_action?: string;
-    target_location_id?: string;
-    dice_result?: number;
-  },
+  data: TurnAction,
   onToken: (token: string) => void,
-  onComplete: (chapter: any, config: any) => void,
-  onError: (error: string) => void
+  onComplete: (chapter: ChapterContent, config: StoryConfig) => void,
+  onError: (error: string) => void,
+  options: { signal?: AbortSignal; onStatus?: (message:string) => void; onReplace?: (text:string) => void; onRoll?: (value:number) => void } = {},
 ) {
   try {
     const token = useAuthStore.getState().token;
     const response = await fetch(`${API_BASE}/api/story/stream-turn`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {})
-      },
-      body: JSON.stringify(data)
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify(data), signal: options.signal,
     });
-
+    if (response.status === 401) useAuthStore.getState().logout();
     if (!response.ok || !response.body) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      const error = await response.json().catch(() => null);
+      throw new Error(typeof error?.detail === 'string' ? error.detail : `Không thể xử lý yêu cầu (${response.status}).`);
     }
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      
-      // Keep the last incomplete line in the buffer
-      buffer = lines.pop() || '';
-
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          const jsonStr = line.substring(6);
-          if (!jsonStr.trim()) continue;
-          
-          try {
-            const parsed = JSON.parse(jsonStr);
-            if (parsed.type === 'token') {
-              onToken(parsed.text);
-            } else if (parsed.type === 'done') {
-              onComplete(parsed.chapter, parsed.config);
-            } else if (parsed.type === 'error') {
-              onError(parsed.message);
-            }
-          } catch (e) {
-            console.error("Error parsing SSE JSON:", e, jsonStr);
-          }
-        }
-      }
-    }
-  } catch (err: any) {
-    onError(err.message || "Streaming failed");
+    await consumeStoryStream(response.body, {
+      token: onToken, replace: options.onReplace || onToken, status: options.onStatus || (() => {}),
+      done: onComplete, roll: options.onRoll,
+    });
+  } catch (err) {
+    if (options.signal?.aborted) return;
+    onError(err instanceof Error ? err.message : 'Kết nối bị gián đoạn. Hãy tải lại để kiểm tra tiến trình.');
   }
 }
 

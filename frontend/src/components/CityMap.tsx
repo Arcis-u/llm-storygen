@@ -140,10 +140,10 @@ export default function CityMap({ locations, onMoveAction }: Props) {
   };
 
   return (
-    <div style={{ display: "flex", gap: "1rem", height: "100%", width: "100%", minHeight: "500px" }}>
+    <div className="city-map-layout" style={{ display: "flex", gap: "1rem", height: "100%", width: "100%", minHeight: "500px" }}>
       {/* Map Container */}
       <div style={{ flex: 1, borderRadius: "12px", overflow: "hidden", border: "1px solid var(--border-subtle)", position: "relative" }}>
-        <Image src="/images/map.png" alt="Map BG" fill style={{ objectFit: "cover", opacity: 0.35, mixBlendMode: "screen", pointerEvents: "none", zIndex: 0 }} />
+        <Image src="/images/map.png" alt="Map BG" fill sizes="(max-width:760px) 100vw, 65vw" style={{ objectFit: "cover", opacity: 0.35, mixBlendMode: "screen", pointerEvents: "none", zIndex: 0 }} />
         <ReactFlow
           nodes={nodes}
           edges={edges}

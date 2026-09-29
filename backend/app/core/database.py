@@ -7,6 +7,8 @@ from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams
 from app.core.config import get_settings
+from pymongo.errors import PyMongoError
+import asyncio
 
 # --- Module-level singletons ---
 _mongo_client: AsyncIOMotorClient | None = None
@@ -32,7 +34,7 @@ def get_qdrant() -> QdrantClient:
     global _qdrant_client
     settings = get_settings()
     if _qdrant_client is None:
-        kwargs = {"url": settings.qdrant_url}
+        kwargs = {"url": settings.qdrant_url, "timeout": 5}
         if settings.qdrant_api_key:
             kwargs["api_key"] = settings.qdrant_api_key
         _qdrant_client = QdrantClient(**kwargs)
@@ -48,7 +50,16 @@ async def init_databases() -> None:
 
     # --- MongoDB: Create indexes for fast queries ---
     db = await get_mongo_db()
+    try:
+        await db.command("ping")
+    except PyMongoError:
+        raise RuntimeError(
+            "MongoDB is unavailable. For local development, open Docker Desktop and run "
+            "'docker compose up -d mongodb qdrant' from the project root, then restart the backend. "
+            "For a remote database, check MONGODB_URL in backend/.env."
+        ) from None
     await db.stories.create_index("user_id")
+    await db.stories.create_index("story_id")
     await db.stories.create_index("created_at")
     await db.chapters.create_index([("story_id", 1), ("chapter_number", 1)])
     await db.users.create_index("user_id", unique=True)
@@ -56,7 +67,13 @@ async def init_databases() -> None:
 
     # --- Qdrant: Ensure vector collection exists ---
     qdrant = get_qdrant()
-    collections = qdrant.get_collections().collections
+    try:
+        collections = (await asyncio.to_thread(qdrant.get_collections)).collections
+    except Exception:
+        raise RuntimeError(
+            "Qdrant is unavailable. Start it with 'docker compose up -d qdrant' "
+            "or check QDRANT_URL in backend/.env."
+        ) from None
     collection_names = [c.name for c in collections]
 
     # Determine vector size based on model
@@ -64,7 +81,7 @@ async def init_databases() -> None:
     vector_size = get_embedding_dimension()
 
     if settings.qdrant_collection_name not in collection_names:
-        qdrant.create_collection(
+        await asyncio.to_thread(qdrant.create_collection,
             collection_name=settings.qdrant_collection_name,
             vectors_config=VectorParams(
                 size=vector_size,
@@ -73,28 +90,20 @@ async def init_databases() -> None:
         )
         print(f"[DB] Created Qdrant collection: {settings.qdrant_collection_name} (dim={vector_size})")
     else:
-        # Check if existing collection has the right dimension
-        try:
-            info = qdrant.get_collection(settings.qdrant_collection_name)
-            existing_size = info.config.params.vectors.size
-            if existing_size != vector_size:
-                print(f"[DB] Qdrant dimension mismatch: existing={existing_size}, expected={vector_size}. Recreating...")
-                qdrant.delete_collection(settings.qdrant_collection_name)
-                qdrant.create_collection(
-                    collection_name=settings.qdrant_collection_name,
-                    vectors_config=VectorParams(
-                        size=vector_size,
-                        distance=Distance.COSINE,
-                    ),
-                )
-                print(f"[DB] Recreated Qdrant collection with dim={vector_size}")
-        except Exception as e:
-            print(f"[DB] Could not verify Qdrant collection: {e}")
+        # Never silently delete all story memories when an embedding model changes.
+        info = await asyncio.to_thread(qdrant.get_collection, settings.qdrant_collection_name)
+        existing_size = getattr(info.config.params.vectors, "size", None)
+        if existing_size != vector_size:
+            raise RuntimeError(
+                f"Qdrant vector size mismatch: stored={existing_size}, expected={vector_size}. "
+                "Existing memories were preserved. Restore the previous EMBEDDING_MODEL or "
+                "choose a new QDRANT_COLLECTION_NAME and explicitly rebuild its memories."
+            )
 
     # Ensure payload index exists for story_id filtering
     try:
         from qdrant_client.models import PayloadSchemaType
-        qdrant.create_payload_index(
+        await asyncio.to_thread(qdrant.create_payload_index,
             collection_name=settings.qdrant_collection_name,
             field_name="story_id",
             field_schema=PayloadSchemaType.KEYWORD,
@@ -112,7 +121,7 @@ async def close_databases() -> None:
         _mongo_client.close()
         _mongo_client = None
     if _qdrant_client:
-        _qdrant_client.close()
+        await asyncio.to_thread(_qdrant_client.close)
         _qdrant_client = None
     print("[DB] All database connections closed.")
 
@@ -143,9 +152,7 @@ async def save_story_memory(
         "npcs": involved_npcs or []
     }
     
-    # Qdrant library uses synchronous calls for point insertion by default,
-    # but we wrap it in an async function for API compatibility.
-    qdrant.upsert(
+    await asyncio.to_thread(qdrant.upsert,
         collection_name=settings.qdrant_collection_name,
         points=[
             {

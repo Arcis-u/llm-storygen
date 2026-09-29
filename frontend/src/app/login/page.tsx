@@ -45,11 +45,13 @@ export default function LoginPage() {
       if (isLogin) {
         const data = await login({ username: formData.username, password: formData.password });
         setAuth(data.token, data.user);
-        router.push("/dashboard");
+        const next = new URLSearchParams(window.location.search).get('next');
+        router.replace(next?.startsWith('/') && !next.startsWith('//') && !next.includes('\\') ? next : '/dashboard');
       } else {
         const data = await register({ username: formData.username, password: formData.password });
         setAuth(data.token, data.user);
-        router.push("/dashboard");
+        const next = new URLSearchParams(window.location.search).get('next');
+        router.replace(next?.startsWith('/') && !next.startsWith('//') && !next.includes('\\') ? next : '/dashboard');
       }
     } catch (err: any) {
       console.error(err);

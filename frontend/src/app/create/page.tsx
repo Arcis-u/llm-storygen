@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Sparkles,
   ChevronRight,
@@ -17,7 +17,9 @@ import {
   Check,
 } from "lucide-react";
 import { useStoryStore } from "@/store/useStoryStore";
-import { useAuthStore } from "@/store/authStore";
+import Link from "next/link";
+import Image from "next/image";
+import { worldFor } from "@/lib/worlds";
 import { createStory } from "@/lib/api";
 
 const GENRES = [
@@ -29,19 +31,14 @@ const GENRES = [
   { value: "romance", label: "Tình Cảm", emoji: "💕", color: "#ec4899", desc: "Tình yêu mãnh liệt, drama và những mối quan hệ phức tạp." },
 ];
 
-export default function CreatePage() {
+function CreateContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { setStoryId, setPhase } = useStoryStore();
-  const { isAuthenticated, user } = useAuthStore();
-
-  useEffect(() => {
-    if (!isAuthenticated()) {
-      router.push("/login");
-    }
-  }, [isAuthenticated, router]);
-
   const [step, setStep] = useState(0);
-  const [genre, setGenre] = useState("");
+  const [chosenGenre, setGenre] = useState<string | null>(null);
+  const requestedGenre = searchParams.get("genre");
+  const genre = chosenGenre ?? (GENRES.some(g => g.value === requestedGenre) ? requestedGenre! : "");
   const [worldDesc, setWorldDesc] = useState("");
   const [charName, setCharName] = useState("");
   const [charBackstory, setCharBackstory] = useState("");
@@ -51,17 +48,9 @@ export default function CreatePage() {
   const [startingGold, setStartingGold] = useState(100);
   const [submitting, setSubmitting] = useState(false);
 
-  // Background color effect based on genre
-  const [bgColor, setBgColor] = useState("var(--bg-base)");
-
-  useEffect(() => {
-    const activeGenre = GENRES.find(g => g.value === genre);
-    if (activeGenre) {
-      setBgColor(`${activeGenre.color}15`); // Very transparent background tint
-    } else {
-      setBgColor("var(--bg-base)");
-    }
-  }, [genre]);
+  const selectedWorld = genre ? worldFor(genre) : null;
+  const bgColor = "#080910";
+  const [submitError, setSubmitError] = useState("");
 
   const canProceed = () => {
     if (step === 0) return genre !== "";
@@ -71,6 +60,8 @@ export default function CreatePage() {
   };
 
   const handleSubmit = async () => {
+    if (submitting) return;
+    setSubmitError("");
     setSubmitting(true);
     try {
       const result = await createStory({
@@ -88,7 +79,7 @@ export default function CreatePage() {
       router.push(`/customize?id=${result.story_id}`);
     } catch (err) {
       console.error("Failed to create story:", err);
-      alert("Không thể tạo truyện. Hãy kiểm tra kết nối Backend.");
+      setSubmitError("Chưa thể tạo thế giới. Nội dung của bạn vẫn được giữ lại; hãy thử lại.");
     } finally {
       setSubmitting(false);
     }
@@ -100,12 +91,14 @@ export default function CreatePage() {
       subtitle: "Chọn thể loại vũ trụ",
       icon: <Palette size={24} />,
       content: (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "1rem" }}>
+        <div className="create-genre-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "1rem" }}>
           {GENRES.map((g, idx) => {
             const isSelected = genre === g.value;
             return (
               <motion.button
                 key={g.value}
+                className="create-genre-card"
+                aria-pressed={isSelected}
                 onClick={() => setGenre(g.value)}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -125,16 +118,18 @@ export default function CreatePage() {
                   boxShadow: isSelected ? `0 0 20px ${g.color}40` : "none",
                 }}
               >
+                <Image src={worldFor(g.value).image} alt="" fill sizes="(max-width:680px) 100vw, 30vw" loading={idx < 2 ? "eager" : "lazy"} className="create-genre-art"/>
+                <div className="create-genre-shade"/>
                 {/* Background glowing mesh */}
                 <div style={{ position: "absolute", top: "-50%", left: "-50%", width: "200%", height: "200%", background: `radial-gradient(circle at 50% 50%, ${g.color}20, transparent 60%)`, opacity: isSelected ? 1 : 0.3, transition: "opacity 0.3s", zIndex: 0, pointerEvents: "none" }} />
                 
                 {isSelected && (
-                  <div style={{ position: "absolute", top: "1rem", right: "1rem", color: g.color }}>
+                  <div style={{ position: "absolute", top: "1rem", right: "1rem", color: "#60eedc", zIndex: 2 }}>
                     <Check size={20} />
                   </div>
                 )}
                 
-                <div style={{ position: "relative", zIndex: 1 }}>
+                <div className="create-genre-copy" style={{ position: "relative", zIndex: 1 }}>
                   <div style={{ fontSize: "2rem", marginBottom: "0.8rem", filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.5))" }}>{g.emoji}</div>
                   <div style={{ fontWeight: 800, fontSize: "1.2rem", marginBottom: "0.5rem", letterSpacing: "0.5px" }}>{g.label}</div>
                   <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)", lineHeight: 1.5 }}>{g.desc}</div>
@@ -159,6 +154,7 @@ export default function CreatePage() {
               Hệ thống AI sẽ dùng thông tin này làm lõi kiến tạo vũ trụ. Mô tả pháp luật, tôn giáo, phe phái hoặc xung đột chính.
             </p>
             <textarea
+              aria-label="Mô tả thế giới"
               className="input-field"
               placeholder="Ví dụ: Một thế giới nơi phép thuật bị cấm đoán bởi Giáo hội Bóng tối..."
               value={worldDesc}
@@ -174,6 +170,7 @@ export default function CreatePage() {
             <input
               className="input-field"
               placeholder="dark, gritty, cinematic, emotional..."
+              aria-label="Phong cách truyện"
               value={tone}
               onChange={(e) => setTone(e.target.value)}
             />
@@ -194,6 +191,7 @@ export default function CreatePage() {
             <input
               className="input-field"
               placeholder="Ví dụ: Kael Ashford"
+              aria-label="Tên nhân vật"
               value={charName}
               onChange={(e) => setCharName(e.target.value)}
               style={{ fontSize: "1.2rem", padding: "1.2rem" }}
@@ -206,6 +204,7 @@ export default function CreatePage() {
             <textarea
               className="input-field"
               placeholder="Ký ức mơ hồ về một vụ thảm sát, một món nợ máu chưa trả..."
+              aria-label="Tiểu sử nhân vật"
               value={charBackstory}
               onChange={(e) => setCharBackstory(e.target.value)}
               style={{ minHeight: 150 }}
@@ -276,12 +275,13 @@ export default function CreatePage() {
               <Coins size={28} color="var(--accent-secondary)" />
               <div>
                 <h3 style={{ margin: "0 0 0.2rem 0", color: "var(--text-primary)", fontSize: "1.1rem" }}>Tài sản Khởi đầu</h3>
-                <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-muted)" }}>Số dư "Gold" khi bước vào thế giới</p>
+                <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-muted)" }}>Số dư Gold khi bước vào thế giới</p>
               </div>
             </div>
             <input
               type="number"
               className="input-field"
+              aria-label="Tài sản khởi đầu"
               value={startingGold}
               onChange={(e) => setStartingGold(Math.max(0, parseInt(e.target.value) || 0))}
               min={0}
@@ -295,7 +295,7 @@ export default function CreatePage() {
   ];
 
   return (
-    <main
+    <main id="main-content" className="nexus-evolved nexus-create"
       style={{
         minHeight: "100vh",
         display: "flex",
@@ -311,16 +311,18 @@ export default function CreatePage() {
         <div style={{ position: "absolute", bottom: "10%", left: "10%", width: "50vw", height: "50vw", borderRadius: "50%", background: "var(--accent-secondary)", filter: "blur(200px)", opacity: 0.05 }} />
       </div>
 
-      <div style={{ display: "flex", width: "100%", maxWidth: 1400, margin: "0 auto", zIndex: 1, padding: "2rem", gap: "3rem" }}>
+      <div className="create-layout" style={{ display: "flex", width: "100%", maxWidth: 1400, margin: "0 auto", zIndex: 1, padding: "2rem", gap: "3rem" }}>
         
         {/* Left Side: Progress Tracker HUD */}
-        <div style={{ width: 320, flexShrink: 0, display: "flex", flexDirection: "column", padding: "2rem 0" }}>
+        <aside className="create-sidebar" style={{ width: 320, flexShrink: 0, display: "flex", flexDirection: "column", padding: "2rem 0" }}>
+          <Link href="/dashboard" className="create-back">← THƯ VIỆN CỦA BẠN</Link>
+          <span className="evo-eyebrow">NEXUS / WORLD BUILDER</span>
           <h1 style={{ fontSize: "2.5rem", fontWeight: 900, marginBottom: "3rem", textTransform: "uppercase", letterSpacing: "1px", lineHeight: 1.1 }}>
-            Kiến Tạo<br/>
-            <span style={{ color: "var(--accent-primary)" }}>Thực Thể</span>
+            Khởi tạo<br/>
+            <span style={{ color: "var(--accent-primary)" }}>huyền thoại.</span>
           </h1>
           
-          <div style={{ display: "flex", flexDirection: "column", gap: "2rem", position: "relative" }}>
+          <div className="create-steps" style={{ display: "flex", flexDirection: "column", gap: "2rem", position: "relative" }}>
             {/* Timeline Line */}
             <div style={{ position: "absolute", left: "23px", top: "10px", bottom: "10px", width: "2px", background: "rgba(255,255,255,0.05)", zIndex: -1 }} />
             
@@ -328,7 +330,7 @@ export default function CreatePage() {
               const isActive = i === step;
               const isPast = i < step;
               return (
-                <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: "1.5rem", cursor: "pointer", opacity: isPast || isActive ? 1 : 0.4 }} onClick={() => isPast && setStep(i)}>
+                <button type="button" disabled={!isPast || submitting} aria-current={isActive ? "step" : undefined} className="create-step" key={i} style={{ display: "flex", alignItems: "flex-start", gap: "1.5rem", opacity: isPast || isActive ? 1 : 0.4 }} onClick={() => isPast && setStep(i)}>
                   <div style={{ 
                     width: 48, height: 48, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
                     background: isActive ? "var(--accent-primary)" : isPast ? "rgba(255,255,255,0.1)" : "var(--bg-tertiary)",
@@ -343,14 +345,16 @@ export default function CreatePage() {
                     <div style={{ fontWeight: 800, fontSize: "1.1rem", color: isActive ? "var(--text-primary)" : "var(--text-secondary)", marginBottom: "0.2rem" }}>{s.title}</div>
                     <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>{s.subtitle}</div>
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>
-        </div>
+          {selectedWorld && <div className="create-world-preview"><Image src={selectedWorld.image} alt="" fill sizes="300px"/><div/><span className="evo-eyebrow">VŨ TRỤ ĐÃ CHỌN</span><h2>{selectedWorld.name}</h2><p>{charName || selectedWorld.subtitle}</p></div>}
+        </aside>
 
         {/* Right Side: Content Area */}
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", position: "relative", paddingTop: "2rem" }}>
+        <div className="create-content" style={{ flex: 1, display: "flex", flexDirection: "column", position: "relative", paddingTop: "2rem" }}>
+          <div className="create-section-heading"><span className="evo-eyebrow">BƯỚC 0{step + 1} / 04</span><h2>{steps[step].subtitle}</h2><p>{step === 0 ? "Chọn bầu không khí cho cuộc phiêu lưu. Phần còn lại sẽ do bạn định hình." : step === 1 ? "Đặt ra quy luật, xung đột và những điều khiến thế giới này khác biệt." : step === 2 ? "Một cái tên. Một quá khứ. Một số phận chưa được viết." : "Xem lại thông số trước khi bước qua cánh cửa đầu tiên."}</p></div>
           
           {/* Main Content Container */}
           <div className="glass-panel" style={{ flex: 1, padding: "3rem", overflowY: "auto", display: "flex", flexDirection: "column" }}>
@@ -370,8 +374,9 @@ export default function CreatePage() {
 
           </div>
 
+          {submitError && <div className="cyber-alert" role="alert">{submitError}</div>}
           {/* Floating Action Bar */}
-          <div style={{ 
+          <div className="create-action-bar" style={{
             marginTop: "1.5rem", 
             display: "flex", 
             justifyContent: "space-between", 
@@ -385,6 +390,7 @@ export default function CreatePage() {
             {step > 0 ? (
               <button
                 className="action-button"
+                disabled={submitting}
                 onClick={() => setStep((s) => s - 1)}
                 style={{ padding: "0.8rem 1.5rem" }}
               >
@@ -440,4 +446,8 @@ export default function CreatePage() {
       </div>
     </main>
   );
+}
+
+export default function CreatePage() {
+  return <Suspense fallback={<main id="main-content" className="cyber-empty">Đang mở cánh cửa thế giới…</main>}><CreateContent/></Suspense>;
 }

@@ -5,7 +5,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useSearchParams } from "next/navigation";
 import {
   Brain,
-  Heart,
   Coins,
   MapPin,
   Scroll,
@@ -25,69 +24,37 @@ import {
   Hammer,
   Home,
   Settings,
+  Maximize2,
+  Minimize2,
+  Network,
+  ShoppingBag,
+  Flag,
+  Route,
 } from "lucide-react";
-import { useStoryStore, ChapterContent } from "@/store/useStoryStore";
+import { useStoryStore } from "@/store/useStoryStore";
 import { submitAction, submitInstantAction, submitIntent, submitCraftAction, getStoryState, streamAction } from "@/lib/api";
 import { audioEngine } from "@/lib/audio";
 
-import CityMap from "@/components/CityMap";
-import RelationshipGraph from "@/components/RelationshipGraph";
+import dynamic from "next/dynamic";
+import Link from "next/link";
+import DecisionJournal from "@/components/DecisionJournal";
+import ChapterNavigator from "@/components/ChapterNavigator";
+import ReaderSettings from "@/components/ReaderSettings";
+import { useReaderPreferences } from "@/store/useReaderPreferences";
+const CityMap = dynamic(() => import("@/components/CityMap"), { ssr: false });
+const RelationshipGraph = dynamic(() => import("@/components/RelationshipGraph"), { ssr: false });
 import DiceRoller from "@/components/DiceRoller";
 import MarketPanel from "@/components/MarketPanel";
 import FactionPanel from "@/components/FactionPanel";
 import PlotTimeline from "@/components/PlotTimeline";
-import AILoadingTerminal from "@/components/AILoadingTerminal";
 import ReactMarkdown from "react-markdown";
 import Image from "next/image";
-
-// ============================================================
-// Typing Effect Component
-// ============================================================
-function TypewriterText({ text, speed = 15 }: { text: string; speed?: number }) {
-  const [displayed, setDisplayed] = useState("");
-  const [done, setDone] = useState(false);
-
-  useEffect(() => {
-    setDisplayed("");
-    setDone(false);
-    let i = 0;
-    const interval = setInterval(() => {
-      i++;
-      setDisplayed(text.slice(0, i));
-      if (i >= text.length) {
-        clearInterval(interval);
-        setDone(true);
-      }
-    }, speed);
-    return () => clearInterval(interval);
-  }, [text, speed]);
-
-  return (
-    <div className="story-text">
-      {displayed.split("\n").map((p, i) =>
-        p.trim() ? <p key={i}>{p}</p> : <br key={i} />
-      )}
-      {!done && (
-        <span
-          style={{
-            display: "inline-block",
-            width: 2,
-            height: "1.1em",
-            background: "var(--accent-primary)",
-            animation: "pulse-glow 1s ease-in-out infinite",
-            verticalAlign: "text-bottom",
-            marginLeft: 2,
-          }}
-        />
-      )}
-    </div>
-  );
-}
+import { worldFor } from "@/lib/worlds";
 
 // ============================================================
 // Memoized Chapter Component
 // ============================================================
-const MemoizedChapter = React.memo(({ content }: { content: string }) => {
+const MemoizedChapter = React.memo(function Chapter({ content }: { content: string }) {
   return (
     <div className="story-text">
       <ReactMarkdown>{content}</ReactMarkdown>
@@ -142,41 +109,44 @@ function StatBar({
 // Left Panel: Dashboard
 // ============================================================
 function DashboardPanel() {
-  const { character, quests, storyId, updateFullState } = useStoryStore();
+  const { character, storyId } = useStoryStore();
   const [dashTab, setDashTab] = useState<"status" | "relations" | "items">("status");
   const [isCraftingMode, setIsCraftingMode] = useState(false);
   const [selectedCraftItems, setSelectedCraftItems] = useState<string[]>([]);
   const [isCrafting, setIsCrafting] = useState(false);
+  const [craftError, setCraftError] = useState("");
+  const busy = useStoryStore(s => s.isLoading || s.isProcessing || s.isEnded);
 
   const handleCraft = async () => {
-    if (selectedCraftItems.length !== 2 || !storyId) return;
+    if (selectedCraftItems.length !== 2 || !storyId || busy) return;
     import("@/lib/audio").then(({ audioEngine }) => audioEngine.playSfx("buy"));
+    setCraftError("");
     setIsCrafting(true);
+    useStoryStore.getState().setIsProcessing(true);
     try {
-      const res = await submitCraftAction({
+      await submitCraftAction({
         story_id: storyId,
         item_id_1: selectedCraftItems[0],
         item_id_2: selectedCraftItems[1]
       });
-      // The API returns the updated economy state, but for robust sync we might need full state.
-      // We can manually update the economy in the store, or rely on the next full poll.
-      // For now, let's just trigger a full state fetch if possible, or update the partial state.
       const fullState = await getStoryState(storyId);
-      updateFullState(fullState);
+      useStoryStore.getState().hydrateStory(fullState);
       
       setSelectedCraftItems([]);
       setIsCraftingMode(false);
       import("@/lib/audio").then(({ audioEngine }) => audioEngine.playSfx("success"));
     } catch (e) {
       console.error(e);
+      setCraftError("Chưa thể chế tác. Hãy kiểm tra nguyên liệu hoặc thử lại.");
       import("@/lib/audio").then(({ audioEngine }) => audioEngine.playSfx("error"));
     } finally {
       setIsCrafting(false);
+      useStoryStore.getState().setIsProcessing(false);
     }
   };
 
   const toggleCraftItem = (itemId: string) => {
-    if (!isCraftingMode) return;
+    if (!isCraftingMode || busy || isCrafting) return;
     import("@/lib/audio").then(({ audioEngine }) => audioEngine.playSfx("click"));
     if (selectedCraftItems.includes(itemId)) {
       setSelectedCraftItems(prev => prev.filter(i => i !== itemId));
@@ -199,6 +169,7 @@ function DashboardPanel() {
         height: "100%",
       }}
     >
+      {craftError && <div className="cyber-alert" role="alert">{craftError}</div>}
       {/* Top Controls */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "-0.5rem" }}>
         <button 
@@ -220,7 +191,9 @@ function DashboardPanel() {
             background: "transparent", border: "none", color: "var(--text-muted)", 
             cursor: "pointer", padding: "0.4rem" 
           }}
-          title="Cài đặt (Sắp ra mắt)"
+          onClick={() => window.dispatchEvent(new Event("nexus-reader-settings"))}
+          title="Cài đặt trải nghiệm đọc"
+          aria-label="Cài đặt trải nghiệm đọc"
         >
           <Settings size={14} />
         </button>
@@ -471,18 +444,8 @@ function DashboardPanel() {
 // Right Panel: Quests & Map
 // ============================================================
 function QuestMapPanel() {
-  const { quests, locations } = useStoryStore();
+  const { quests } = useStoryStore();
   const [rightTab, setRightTab] = useState<"quests" | "map">("quests");
-
-  const priorityBadge = (p: string) => {
-    const map: Record<string, { label: string; cls: string }> = {
-      urgent: { label: "Cấp bách", cls: "badge-urgent" },
-      bound: { label: "Ràng buộc", cls: "badge-bound" },
-      long_term: { label: "Dài hạn", cls: "badge-long-term" },
-    };
-    const info = map[p] || map["long_term"];
-    return <span className={`badge ${info.cls}`}>{info.label}</span>;
-  };
 
   return (
     <div
@@ -581,15 +544,22 @@ function QuestMapPanel() {
 // Center Panel: Story & Choices
 // ============================================================
 function StoryPanel() {
-  const { chapters, currentChoices, isLoading, isProcessing, storyId } = useStoryStore();
-  const { updateFullState, setLoading, setIsProcessing, setError } = useStoryStore();
+  const { chapters, currentChoices, isLoading, isProcessing, storyId, isEnded, error, genre } = useStoryStore();
+  const { setLoading, setIsProcessing, setError } = useStoryStore();
   const isBusy = isLoading || isProcessing;
+  const [approach, setApproach] = useState<"balanced" | "careful" | "bold">("balanced");
+  const [showChoiceDetails, setShowChoiceDetails] = useState(false);
+  const [streamStatus, setStreamStatus] = useState("");
+  const [diceValue, setDiceValue] = useState<number | null>(null);
+  const submitting = useRef(false);
+  const controller = useRef<AbortController | null>(null);
   const [customInput, setCustomInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
-  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const [activeChapter, setActiveChapter] = useState<number | null>(null);
+  const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { controller.current?.abort(); if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current); }, []);
+  const [selectedChapter, setActiveChapter] = useState<number | null>(null);
   const [isTocOpen, setIsTocOpen] = useState(false);
-  const [readMode, setReadMode] = useState<"continuous" | "single">("continuous");
+  const [readMode, setReadMode] = useState<"continuous" | "single">("single");
   const [streamingText, setStreamingText] = useState("");
   
   // Dice Roller State
@@ -597,47 +567,22 @@ function StoryPanel() {
 
   const latestChapter = chapters.length > 0 ? chapters[chapters.length - 1] : null;
 
-  // Track the number of chapters to detect when a new one is added
-  const prevChapterCount = useRef(chapters.length);
+  const activeChapter = selectedChapter ?? latestChapter?.chapter_number ?? null;
 
   useEffect(() => {
-    let scrolled = false;
-
-    if (chapters.length > prevChapterCount.current) {
-      if (latestChapter) {
-        setActiveChapter(latestChapter.chapter_number);
-        // Play BGM based on new chapter's tone
-        audioEngine.playBGM(latestChapter.tone || "ambient");
-        
-        // Auto-scroll logic
-        if (scrollRef.current) {
-          if (readMode === "single") {
-            scrollRef.current.scrollTop = 0;
-            scrolled = true;
-          } else if (readMode === "continuous") {
-            // Wait for DOM to paint new chapter
-            setTimeout(() => {
-              if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-            }, 50);
-            scrolled = true;
-          }
-        }
+    if (!latestChapter) return;
+    audioEngine.playBGM(latestChapter.tone || "ambient");
+    const frame = requestAnimationFrame(() => {
+      if (!scrollRef.current) return;
+      const reader = scrollRef.current.closest<HTMLElement>(".story-reader");
+      if (readMode === "single") {
+        scrollRef.current.scrollTop = 0;
+        if (reader && getComputedStyle(reader).display === "block") reader.scrollTop = 0;
       }
-    } else if (latestChapter && !activeChapter) {
-      // Initial load
-      setActiveChapter(latestChapter.chapter_number);
-      audioEngine.playBGM(latestChapter.tone || "ambient");
-      // Scroll to bottom on initial load for continuous mode
-      if (readMode === "continuous") {
-        setTimeout(() => {
-          if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-        }, 100);
-        scrolled = true;
-      }
-    }
-
-    prevChapterCount.current = chapters.length;
-  }, [chapters, latestChapter, activeChapter, readMode]);
+      else if (selectedChapter === null) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [latestChapter, readMode, selectedChapter]);
 
   const handleScroll = () => {
     if (readMode !== "continuous") return; // Only track scroll in continuous mode
@@ -674,9 +619,10 @@ function StoryPanel() {
 
 
   const handleChoice = async (choiceId: number, riskLevel?: "normal" | "risky" | "crucial") => {
-    if (!storyId || isBusy) return;
+    if (!storyId || isBusy || isEnded || submitting.current) return;
     
     if (riskLevel === "risky" || riskLevel === "crucial") {
+      setDiceValue(null);
       setPendingChoice({ id: choiceId, risk: riskLevel });
       return;
     }
@@ -684,98 +630,33 @@ function StoryPanel() {
     executeChoice(choiceId);
   };
 
-  const executeChoice = async (choiceId: number, diceResult?: number) => {
-    import("@/lib/audio").then(({ audioEngine }) => audioEngine.playSfx("click"));
-    setLoading(true);
-    setIsProcessing(true);
-    setPendingChoice(null);
-    setStreamingText("");
+  const runAction = async (payload: {action_type: 'choice' | 'custom'; choice_id?:number; custom_action?:string}) => {
+    if (!storyId || submitting.current || isBusy || isEnded) return;
+    submitting.current = true;
+    setLoading(true); setIsProcessing(true); setError(null); setStreamingText("");
+    setStreamStatus("Đã gửi hành động…");
+    controller.current = new AbortController();
     try {
       await streamAction(
-        {
-          story_id: storyId!,
-          action_type: "choice",
-          choice_id: choiceId,
-          dice_result: diceResult,
-        },
-        (token) => {
-          setStreamingText(prev => prev + token);
-          if (readMode === "continuous" && scrollRef.current) {
-            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-          }
-        },
+        {story_id:storyId, ...payload, expected_chapter: latestChapter?.chapter_number || 0, approach},
+        token => setStreamingText(prev => prev + token),
         (chapter, config) => {
-          updateFullState({
-            chapter,
-            character: config?.character ?? {},
-            quests: config?.quests ?? [],
-            locations: config?.locations ?? [],
-          });
-          setIsProcessing(false);
+          setActiveChapter(null);
+          useStoryStore.getState().completeTurn(chapter, config);
           setStreamingText("");
+          if (payload.action_type === 'custom') setCustomInput("");
         },
-        (error) => {
-          console.error(error);
-          setError("Lỗi khi tạo chương mới.");
-          setLoading(false);
-          setIsProcessing(false);
-          setStreamingText("");
-        }
+        message => { setError(message); setStreamingText(""); setPendingChoice(null); },
+        {signal:controller.current.signal, onReplace:setStreamingText, onStatus:setStreamStatus, onRoll:setDiceValue},
       );
-    } catch (err) {
-      console.error(err);
-      setError("Lỗi không lường trước.");
-      setLoading(false);
-      setIsProcessing(false);
-      setStreamingText("");
+    } finally {
+      submitting.current = false;
+      if (!controller.current?.signal.aborted) { setLoading(false); setIsProcessing(false); }
     }
   };
-
-  const handleCustomAction = async () => {
-    if (!storyId || isBusy || !customInput.trim()) return;
-    import("@/lib/audio").then(({ audioEngine }) => audioEngine.playSfx("click"));
-    setLoading(true);
-    setIsProcessing(true);
-    setStreamingText("");
-    try {
-      await streamAction(
-        {
-          story_id: storyId,
-          action_type: "custom",
-          custom_action: customInput.trim(),
-        },
-        (token) => {
-          setStreamingText(prev => prev + token);
-          if (readMode === "continuous" && scrollRef.current) {
-            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-          }
-        },
-        (chapter, config) => {
-          updateFullState({
-            chapter,
-            character: config?.character ?? {},
-            quests: config?.quests ?? [],
-            locations: config?.locations ?? [],
-          });
-          setCustomInput("");
-          setIsProcessing(false);
-          setStreamingText("");
-        },
-        (error) => {
-          console.error(error);
-          setError("Lỗi khi tạo chương mới.");
-          setLoading(false);
-          setIsProcessing(false);
-          setStreamingText("");
-        }
-      );
-    } catch (err) {
-      console.error(err);
-      setError("Lỗi không lường trước.");
-      setLoading(false);
-      setIsProcessing(false);
-      setStreamingText("");
-    }
+  const executeChoice = (choiceId:number) => runAction({action_type:'choice', choice_id:choiceId});
+  const handleCustomAction = () => {
+    if (customInput.trim()) void runAction({action_type:'custom', custom_action:customInput.trim()});
   };
 
   const riskIcon = (r: string) => {
@@ -786,7 +667,7 @@ function StoryPanel() {
 
   return (
     <div
-      className="glass-panel"
+      className="glass-panel story-reader"
       style={{
         padding: 0, // Remove padding to use full width
         display: "flex",
@@ -811,6 +692,7 @@ function StoryPanel() {
           {/* Prev Button */}
           {activeChapter && activeChapter > 1 && (
             <button
+              aria-label="Chương trước"
               onClick={() => {
                 const target = activeChapter - 1;
                 setActiveChapter(target);
@@ -839,6 +721,8 @@ function StoryPanel() {
 
           {/* Dropdown Button */}
           <button 
+            aria-label="Mở mục lục"
+            aria-expanded={isTocOpen}
             onClick={() => setIsTocOpen(!isTocOpen)}
             style={{ 
               display: "flex", alignItems: "center", gap: "0.5rem",
@@ -875,6 +759,7 @@ function StoryPanel() {
           {/* Next Button */}
           {activeChapter && latestChapter && activeChapter < latestChapter.chapter_number && (
             <button
+              aria-label="Chương tiếp theo"
               onClick={() => {
                 const target = activeChapter + 1;
                 setActiveChapter(target);
@@ -906,85 +791,18 @@ function StoryPanel() {
             {chapters.find(c => c.chapter_number === activeChapter)?.chapter_title || ""}
           </span>
 
-          {/* Table of Contents Dropdown Menu */}
-          <AnimatePresence>
-            {isTocOpen && (
-              <motion.div
-                initial={{ opacity: 0, y: 10, scale: 0.95, filter: "blur(10px)" }}
-                animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
-                exit={{ opacity: 0, y: 10, scale: 0.95, filter: "blur(10px)" }}
-                transition={{ duration: 0.2, ease: "easeOut" }}
-                style={{
-                  position: "absolute",
-                  top: "120%",
-                  left: 0,
-                  background: "rgba(10,10,15,0.85)",
-                  backdropFilter: "blur(20px)",
-                  WebkitBackdropFilter: "blur(20px)",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  borderRadius: "12px",
-                  padding: "1rem",
-                  display: "grid",
-                  gridTemplateColumns: "repeat(5, 1fr)",
-                  gap: "0.5rem",
-                  zIndex: 50,
-                  boxShadow: "0 20px 40px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.1)"
-                }}
-              >
-                {chapters.map((ch, idx) => (
-                  <motion.button
-                    key={ch.chapter_number}
-                    initial={{ opacity: 0, scale: 0 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: idx * 0.03, type: "spring", stiffness: 300, damping: 20 }}
-                    onClick={() => {
-                      setIsTocOpen(false);
-                      setActiveChapter(ch.chapter_number);
-                      if (readMode === "continuous") {
-                        setTimeout(() => {
-                          const el = document.getElementById(`chapter-${ch.chapter_number}`);
-                          if (el) el.scrollIntoView({ behavior: 'smooth' });
-                        }, 50);
-                      } else {
-                        if (scrollRef.current) scrollRef.current.scrollTop = 0;
-                      }
-                    }}
-                    style={{
-                      width: "45px",
-                      height: "45px",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      background: activeChapter === ch.chapter_number ? "rgba(0,245,212,0.2)" : "rgba(255,255,255,0.03)",
-                      border: activeChapter === ch.chapter_number ? "1px solid var(--accent-secondary)" : "1px solid rgba(255,255,255,0.05)",
-                      color: activeChapter === ch.chapter_number ? "var(--accent-secondary)" : "rgba(255,255,255,0.5)",
-                      borderRadius: "8px",
-                      fontWeight: 800,
-                      fontSize: "1rem",
-                      cursor: "pointer",
-                      transition: "all 0.2s ease"
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = "rgba(0,245,212,0.15)";
-                      e.currentTarget.style.color = "var(--accent-secondary)";
-                      e.currentTarget.style.transform = "translateY(-2px)";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = activeChapter === ch.chapter_number ? "rgba(0,245,212,0.2)" : "rgba(255,255,255,0.03)";
-                      e.currentTarget.style.color = activeChapter === ch.chapter_number ? "var(--accent-secondary)" : "rgba(255,255,255,0.5)";
-                      e.currentTarget.style.transform = "translateY(0)";
-                    }}
-                  >
-                    {ch.chapter_number}
-                  </motion.button>
-                ))}
-              </motion.div>
-            )}
-          </AnimatePresence>
+          <ChapterNavigator open={isTocOpen} onClose={() => setIsTocOpen(false)} chapters={chapters} current={activeChapter} onSelect={number => {
+            setActiveChapter(number);
+            requestAnimationFrame(() => {
+              if (readMode === "continuous") document.getElementById(`chapter-${number}`)?.scrollIntoView({ behavior: "smooth" });
+              else if (scrollRef.current) { scrollRef.current.scrollTop = 0; const reader = scrollRef.current.closest<HTMLElement>(".story-reader"); if (reader) reader.scrollTop = 0; }
+            });
+          }} />
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
           <button 
             onClick={() => setReadMode(m => m === "continuous" ? "single" : "continuous")}
+            aria-label={readMode === "continuous" ? "Đọc từng chương" : "Cuộn liền mạch"}
             title={readMode === "continuous" ? "Chuyển sang Đọc từng chương" : "Chuyển sang Cuộn liền mạch"}
             style={{
               background: "rgba(255,255,255,0.05)",
@@ -1003,7 +821,7 @@ function StoryPanel() {
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
             <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--accent-success)", boxShadow: "0 0 10px var(--accent-success)" }} />
             <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, letterSpacing: "2px" }}>
-              DATA_LINK: ONLINE
+              {isBusy ? "DATA_LINK: PROCESSING" : "DATA_LINK: SYNCED"}
             </span>
           </div>
         </div>
@@ -1011,6 +829,7 @@ function StoryPanel() {
 
       {/* Story text area */}
       <div
+        className="story-scroll"
         ref={scrollRef}
         onScroll={handleScroll}
         style={{
@@ -1061,13 +880,11 @@ function StoryPanel() {
                   </div>
                 )}
                 
-                {/* AAA Scene Banner */}
-                <div style={{ position: "relative", width: "100%", height: "200px", borderRadius: "1rem", overflow: "hidden", marginBottom: "2rem", border: "1px solid rgba(255,255,255,0.05)" }}>
-                  <Image src={i % 2 === 0 ? "/images/darkfantasybanner.png" : "/images/cyberpunkbanner.png"} alt="Scene" fill style={{ objectFit: "cover", opacity: 0.5, mixBlendMode: "luminosity" }} />
-                  <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", background: "linear-gradient(180deg, transparent 0%, rgba(5,5,10,1) 100%)" }} />
-                  <div style={{ position: "absolute", bottom: "1rem", left: "1.5rem", fontWeight: 800, fontSize: "1.2rem", letterSpacing: "2px", textShadow: "0 2px 10px rgba(0,0,0,0.8)", color: "var(--accent-secondary)", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                    <MapPin size={18} /> {ch.chapter_number === 1 ? "ĐIỂM KHỞI ĐẦU" : `PHÂN ĐOẠN ${ch.chapter_number}`}
-                  </div>
+                <div className="chapter-scene">
+                  <Image src={worldFor(genre).image} alt="" sizes="(max-width:760px) 100vw, 75vw" fill priority={i === 0} />
+                  <div className="chapter-scene-shade"/>
+                  <div className="chapter-scene-copy"><span className="evo-eyebrow">{worldFor(genre).name} / CHƯƠNG {String(ch.chapter_number).padStart(2, "0")}</span><h2>{ch.chapter_title || `Chương ${ch.chapter_number}`}</h2><span className="chapter-scene-meta"><BookOpen size={13}/>{Math.max(1, Math.ceil(ch.content.trim().split(/\s+/).length / 220))} phút đọc<span>•</span>{ch.tone === "combat" ? "Trong giao tranh" : ch.tone === "tense" ? "Căng thẳng" : "Hành trình tiếp diễn"}</span></div>
+                  <span className="chapter-scene-number" aria-hidden="true">{String(ch.chapter_number).padStart(2,"0")}</span>
                 </div>
 
                 <MemoizedChapter content={ch.content} />
@@ -1077,6 +894,7 @@ function StoryPanel() {
         )}
 
         {/* Loading indicator / Streaming Text */}
+        {isBusy && <div className="stream-status" role="status"><Loader2 size={15} className="animate-spin"/>{streamStatus || "Đang xử lý lượt chơi…"}</div>}
         {isBusy && (
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
@@ -1105,7 +923,7 @@ function StoryPanel() {
               </div>
             ) : (
               <div style={{ display: "flex", justifyContent: "center" }}>
-                <AILoadingTerminal />
+                <div className="cyber-empty" style={{minHeight:180}}><span className="cyber-kicker">NEXUS // ĐANG KIẾN TẠO</span><p>Lựa chọn của bạn đang định hình chương tiếp theo.</p></div>
               </div>
             )}
           </motion.div>
@@ -1113,8 +931,8 @@ function StoryPanel() {
       </div>
 
       {/* Action Input Area (Sticky Bottom) */}
-      {!isBusy && (
-        <motion.div 
+      {!isBusy && !isEnded && chapters.length > 0 && (
+        <motion.div className="decision-dock"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           style={{ 
@@ -1125,10 +943,13 @@ function StoryPanel() {
             backdropFilter: "blur(10px)"
           }}
         >
+          <div className="decision-heading"><span><Route size={15}/>NGÃ RẼ TIẾP THEO</span><small>Lựa chọn của bạn định hình câu chuyện.</small><button className="touch-choice-details" aria-expanded={showChoiceDetails} onClick={() => setShowChoiceDetails(v => !v)}>{showChoiceDetails ? "Thu mô tả" : "Xem mô tả"}</button></div>
+          <fieldset className="approach-selector"><legend>CÁCH TIẾP CẬN</legend>{([['careful','Thận trọng'],['balanced','Cân bằng'],['bold','Táo bạo']] as const).map(([value,label]) => <label key={value}><input type="radio" name="approach" value={value} checked={approach===value} onChange={() => setApproach(value)}/><span>{label}</span></label>)}<small>Bạn muốn tiếp cận tình huống theo cách nào?</small></fieldset>
           {/* Choices Grid */}
           {currentChoices.length > 0 && (
             <div
               className="choices-grid-container"
+              data-expanded={showChoiceDetails}
               style={{
                 display: "grid",
                 gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
@@ -1158,7 +979,7 @@ function StoryPanel() {
                     flexDirection: "column",
                     boxShadow: c.risk_level === 'crucial' ? 'inset 0 0 20px rgba(220,38,38,0.1)' : 'none'
                   }}
-                  whileHover={{ scale: 1.02, backgroundColor: "rgba(30,30,45,0.8)" }}
+                  whileHover={{ y: -4, scale: 1.01, backgroundColor: "rgba(30,30,45,0.8)" }}
                   whileTap={{ scale: 0.98 }}
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
@@ -1197,11 +1018,13 @@ function StoryPanel() {
             </div>
             <input
               id="input-custom-action"
+              aria-label="Hành động tùy chỉnh"
+              maxLength={4000}
               className="input-field"
               placeholder="Nhập lệnh hoặc hành động tùy chỉnh..."
               value={customInput}
               onChange={(e) => setCustomInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleCustomAction()}
+              onKeyDown={(e) => !e.nativeEvent.isComposing && e.key === "Enter" && handleCustomAction()}
               style={{ flex: 1, paddingLeft: "3rem", fontSize: "1rem", letterSpacing: "0.5px" }}
             />
             <button
@@ -1220,17 +1043,12 @@ function StoryPanel() {
         </motion.div>
       )}
 
-      {/* Dice Roller Overlay */}
-      <DiceRoller 
-        isOpen={pendingChoice !== null}
-        riskLevel={pendingChoice?.risk || "risky"}
-        onResult={(result) => {
-          if (pendingChoice) {
-            executeChoice(pendingChoice.id, result);
-          }
-        }}
-        onCancel={() => setPendingChoice(null)}
-      />
+      {error && <div className="cyber-alert" role="alert">{error}<button className="btn-secondary" onClick={() => window.location.reload()}>Tải lại tiến trình</button></div>}
+      {isEnded && <div className="cyber-alert ending-banner"><BookOpen size={20}/><div><strong>Hành trình đã khép lại.</strong><p>Bạn vẫn có thể đọc lại các chương và lưu nhật ký quyết định.</p></div><Link href="/dashboard">Về thư viện</Link></div>}
+      <DiceRoller isOpen={pendingChoice !== null} riskLevel={pendingChoice?.risk || "risky"}
+        result={diceValue} rolling={isBusy}
+        onConfirm={() => {if (pendingChoice) void executeChoice(pendingChoice.id);}}
+        onCancel={() => setPendingChoice(null)} />
     </div>
   );
 }
@@ -1241,89 +1059,46 @@ function StoryPanel() {
 function PlayContent() {
   const params = useSearchParams();
   const storyId = params.get("id") || "";
-  const { setStoryId, setPhase, setCharacter, setQuests, setLocations, setWorldOrganizations, setMarketItems, setPlotTriggers, setIsProcessing, setGenre } = useStoryStore();
-  const [mainTab, setMainTab] = useState<"story" | "map" | "relations" | "timeline" | "market" | "factions">("story");
+  const setIsProcessing = useStoryStore(s => s.setIsProcessing);
+  const [mainTab, setMainTab] = useState<"story" | "map" | "relations" | "timeline" | "market" | "factions" | "journal">("story");
   
   // Connect to store for the other tabs
   const { locations, character, plotTriggers, chapters, marketItems, worldOrganizations, updateFullState, setLoading, setError, isLoading, isProcessing, genre } = useStoryStore();
 
+  const [booting, setBooting] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [mobileHud, setMobileHud] = useState(false);
+  const [focusMode, setFocusMode] = useState(false);
+  const [readerSettings, setReaderSettings] = useState(false);
+  const { fontSize, typeface, measure, illustrations } = useReaderPreferences();
+  const [muted, setMuted] = useState(() => audioEngine.getMuted());
+  const isEnded = useStoryStore(s => s.isEnded);
   useEffect(() => {
-    if (storyId) {
-      setStoryId(storyId);
-      setPhase("playing");
-
-      // Load existing state
-      getStoryState(storyId)
-        .then((data) => {
-          if (data.config) {
-            if (data.config.genre) setGenre(data.config.genre);
-            setCharacter(data.config.character);
-            setQuests(data.config.quests || []);
-            setLocations(data.config.locations || []);
-            setWorldOrganizations(data.config.available_organizations || []);
-            setMarketItems(data.config.available_shop_items || []);
-            setPlotTriggers(data.config.plot_triggers || []);
-            
-            // Start BGM based on genre
-            import("@/lib/audio").then(({ audioEngine }) => {
-              audioEngine.playBGM(data.config.genre || "Cyberpunk");
-            });
-          }
-          if (data.chapters && data.chapters.length > 0) {
-            useStoryStore.setState({ chapters: data.chapters });
-            // Restore choices from the latest chapter on refresh
-            const latestChapter = data.chapters[data.chapters.length - 1];
-            if (latestChapter.choices) {
-              useStoryStore.setState({ currentChoices: latestChapter.choices });
-            }
-          }
-          // Restore processing state from backend lock
-          if (data.is_processing) {
-            setIsProcessing(true);
-            setLoading(true);
-          }
-        })
-        .catch(console.error);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    const show = () => setReaderSettings(true);
+    window.addEventListener("nexus-reader-settings", show);
+    return () => window.removeEventListener("nexus-reader-settings", show);
+  }, []);
+  useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    useStoryStore.getState().resetStore();
+    const load = async () => {
+      try {
+        if (!storyId) { setLoadError("Chưa chọn câu chuyện."); return; }
+        const data = await getStoryState(storyId);
+        if (cancelled) return;
+        useStoryStore.getState().hydrateStory(data);
+        setLoadError("");
+        if (data.is_processing) timer = setTimeout(load, 3000);
+      } catch { if (!cancelled) setLoadError("Không thể tải câu chuyện. Kiểm tra kết nối và thử lại."); }
+      finally { if (!cancelled) setBooting(false); }
+    };
+    void load();
+    return () => { cancelled = true; clearTimeout(timer); audioEngine.stopBGM(); };
   }, [storyId]);
 
-  // Poll backend when processing is detected (e.g. after page refresh mid-generation)
-  useEffect(() => {
-    if (!isProcessing || !storyId) return;
-
-    const interval = setInterval(async () => {
-      try {
-        const data = await getStoryState(storyId);
-        if (!data.is_processing) {
-          // Generation finished! Reload all data.
-          clearInterval(interval);
-          if (data.config) {
-            if (data.config.genre) setGenre(data.config.genre);
-            setCharacter(data.config.character);
-            setQuests(data.config.quests || []);
-            setLocations(data.config.locations || []);
-          }
-          if (data.chapters && data.chapters.length > 0) {
-            useStoryStore.setState({ chapters: data.chapters });
-            const latestChapter = data.chapters[data.chapters.length - 1];
-            if (latestChapter.choices) {
-              useStoryStore.setState({ currentChoices: latestChapter.choices });
-            }
-          }
-          setIsProcessing(false);
-          setLoading(false);
-        }
-      } catch (err) {
-        console.error("[POLL] Error checking state:", err);
-      }
-    }, 3000);
-    return () => clearInterval(interval);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isProcessing, storyId]);
-
   const handleCustomAction = async (action_type: "move" | "buy_item" | "join_faction", target_id: string) => {
-    if (!storyId || isLoading || isProcessing) return;
+    if (!storyId || isLoading || isProcessing || isEnded) return;
     
     // --- System Actions (Instant) ---
     if (action_type === "buy_item") {
@@ -1370,6 +1145,7 @@ function PlayContent() {
         story_id: storyId,
         action_type,
         target_location_id: target_id,
+        expected_chapter: chapters.at(-1)?.chapter_number || 0,
       };
       const result = await submitAction(payload as Parameters<typeof submitAction>[0]);
       updateFullState(result);
@@ -1384,61 +1160,17 @@ function PlayContent() {
 
   const themeClass = genre?.toLowerCase().includes("fantasy") ? "theme-fantasy" : "theme-cyberpunk";
 
+  if (booting) return <main id="main-content" className="cyber-empty"><Loader2 className="animate-spin"/> Đang đồng bộ câu chuyện…</main>;
+  if (loadError) return <main id="main-content" className="cyber-empty"><p>{loadError}</p><button className="btn-secondary" onClick={() => window.location.reload()}>Thử lại</button><Link href="/dashboard">Về thư viện</Link></main>;
   return (
-    <div className={`split-layout ${themeClass}`} style={{ maxWidth: "100%", padding: "1rem 2rem", position: "relative" }}>
-      {/* --- Death Screen Overlay --- */}
-      <AnimatePresence>
-        {character.hp <= 0 && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            style={{
-              position: "fixed",
-              top: 0, left: 0, width: "100vw", height: "100vh",
-              background: "radial-gradient(circle at center, rgba(150,0,0,0.8) 0%, rgba(10,0,0,1) 100%)",
-              zIndex: 9999,
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              backdropFilter: "blur(10px)"
-            }}
-          >
-            <motion.h1 
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ delay: 0.5, duration: 1 }}
-              style={{ fontSize: "5rem", color: "var(--accent-danger)", textShadow: "0 0 20px red", margin: 0, fontFamily: "var(--font-mono)" }}
-            >
-              YOU DIED
-            </motion.h1>
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 1.5 }}
-              style={{ color: "rgba(255,255,255,0.7)", marginTop: "1rem", fontSize: "1.2rem" }}
-            >
-              Hành trình của bạn đã kết thúc tại đây...
-            </motion.p>
-            <motion.button
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 2.5 }}
-              className="action-button"
-              style={{ marginTop: "3rem", background: "rgba(255,0,0,0.2)", border: "1px solid red" }}
-              onClick={() => window.location.href = "/"}
-            >
-              BẮT ĐẦU LẠI
-            </motion.button>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* --- AAA Backgrounds --- */}
-      <div className="hex-grid-bg" style={{ opacity: 0.2 }} />
-      <div className="scanlines" style={{ opacity: 0.15 }} />
+    <div id="main-content" className={`split-layout nexus-play nexus-play-evolved ${themeClass} ${focusMode ? 'focus-mode' : ''} ${mobileHud ? 'hud-open' : ''} ${illustrations ? '' : 'no-scene-illustrations'} ${typeface === 'sans' ? 'reader-sans' : ''}`} style={{maxWidth:"100%",padding:"1rem 2rem",position:"relative",'--reader-size':`${fontSize}px`,'--reader-measure':measure === 'wide' ? '980px' : '740px'} as React.CSSProperties}>
+      <header className="play-masthead"><Link href="/dashboard" className="play-brand">N<span>↗</span><b>NEXUS <i>TALE</i></b></Link><div className="play-context"><span>{worldFor(genre).name}</span><i/><strong>{locations.find(l => l.is_current)?.name || "Hành trình của bạn"}</strong></div><span className="play-session-state"><span className="signal-dot"/>{isProcessing || isLoading ? "ĐANG DIỄN TIẾN" : isEnded ? "ĐÃ KHÉP LẠI" : "ĐANG NHẬP VAI"}</span></header>
+      <div className="play-utility"><button className="cyber-icon-button mobile-hud-toggle" onClick={() => setMobileHud(v => !v)} aria-expanded={mobileHud} aria-label="Mở trạng thái nhân vật"><Users size={17}/></button><Link className="cyber-icon-button" href="/dashboard" data-tip="Thư viện" aria-label="Về thư viện"><Home size={17}/></Link><button className="cyber-icon-button" onClick={() => setFocusMode(v => !v)} data-tip={focusMode ? "Hiện HUD" : "Tập trung đọc"} aria-label={focusMode ? "Hiện bảng trạng thái" : "Tập trung đọc"}>{focusMode ? <Minimize2 size={17}/> : <Maximize2 size={17}/>}</button><button className="cyber-icon-button" onClick={() => setReaderSettings(v => !v)} data-tip="Góc đọc của bạn" aria-expanded={readerSettings} aria-label="Cài đặt trải nghiệm đọc"><Settings size={17}/></button></div>
+      <ReaderSettings open={readerSettings} onClose={() => setReaderSettings(false)} muted={muted} onMute={() => setMuted(audioEngine.toggleMute())} />
+      <div className="play-atmosphere" aria-hidden="true"><Image src={worldFor(genre).image} alt="" fill sizes="100vw" /></div>
 
       {/* LEFT COLUMN: HUD Dashboard */}
+      {mobileHud && <button className="hud-backdrop" aria-label="Đóng bảng nhân vật" onClick={() => setMobileHud(false)}/>}
       <div className="sidebar" style={{ width: 300, display: "flex", flexDirection: "column", gap: "1rem" }}>
         <div style={{ flex: 3, minHeight: 0, overflow: "hidden" }}>
           <DashboardPanel />
@@ -1450,19 +1182,23 @@ function PlayContent() {
       
       {/* CENTER COLUMN: Navigation + Active Tab Content */}
       <div className="main-content">
+        {chapters.length === 0 && <div className="cyber-alert">Câu chuyện chưa có chương mở đầu. <Link href={`/customize?id=${encodeURIComponent(storyId)}`}>Hoàn tất nhân vật & bắt đầu</Link></div>}
         
         {/* Top Navigation Bar - Holographic Tabs */}
-        <div style={{ display: "flex", gap: "0.5rem", paddingBottom: "1rem", borderBottom: "1px solid rgba(255,255,255,0.05)", marginBottom: "1rem", overflowX: "auto", flexShrink: 0, position: "relative" }}>
+        <div className="play-navigation" style={{ display: "flex", gap: "0.5rem", paddingBottom: "1rem", borderBottom: "1px solid rgba(255,255,255,0.05)", marginBottom: "1rem", overflowX: "auto", flexShrink: 0, position: "relative" }}>
           {[
-            { key: "story", label: "TRUYỆN", icon: "📖" },
-            { key: "map", label: "BẢN ĐỒ", icon: "🗺️" },
-            { key: "relations", label: "QUAN HỆ", icon: "👥" },
-            { key: "timeline", label: "CỐT TRUYỆN", icon: "⏳" },
-            { key: "market", label: "CỬA HÀNG", icon: "🛒" },
-            { key: "factions", label: "THẾ LỰC", icon: "🏛️" },
+            { key: "story", label: "TRUYỆN", icon: <BookOpen size={16}/> },
+            { key: "map", label: "BẢN ĐỒ", icon: <MapPin size={16}/> },
+            { key: "relations", label: "QUAN HỆ", icon: <Network size={16}/> },
+            { key: "journal", label: "NHẬT KÝ", icon: <Scroll size={16}/> },
+            { key: "timeline", label: "CỐT TRUYỆN", icon: <Route size={16}/> },
+            { key: "market", label: "CỬA HÀNG", icon: <ShoppingBag size={16}/> },
+            { key: "factions", label: "THẾ LỰC", icon: <Flag size={16}/> },
           ].map(t => (
             <button
               key={t.key}
+              disabled={isLoading || isProcessing}
+              aria-pressed={mainTab === t.key}
               onClick={() => setMainTab(t.key as typeof mainTab)}
               style={{
                 position: "relative",
@@ -1502,9 +1238,10 @@ function PlayContent() {
 
         {/* Tab Content */}
         {mainTab === "story" && <StoryPanel />}
+        {mainTab === "journal" && <div className="glass-panel" style={{flex:1,overflowY:"auto",padding:"1.5rem"}}><DecisionJournal/></div>}
         
         {mainTab === "map" && (
-          <div className="glass-panel" style={{ flex: 1, padding: "1rem", overflow: "hidden" }}>
+          <div className="glass-panel play-map" style={{ flex: 1, padding: "1rem", overflow: "hidden" }}>
             <h2 style={{ marginTop: 0, color: "var(--text-primary)" }}>Bản đồ Thành phố</h2>
             <CityMap locations={locations} onMoveAction={(id) => handleCustomAction("move", id)} />
           </div>

@@ -926,8 +926,9 @@ button:hover > .choice-hover-fx {
   margin-top: 0;
 }
 
-/* When the parent container is hovered, ALL choice descriptions expand */
-.choices-grid-container:hover .choice-card-wrapper .choice-desc {
+/* Reveal all descriptions together when any choice is hovered or keyboard-focused. */
+.choices-grid-container:hover .choice-desc,
+.choices-grid-container:has(.choice-card-wrapper:focus-visible) .choice-desc {
   grid-template-rows: 1fr;
   opacity: 1;
   margin-top: 0.5rem;

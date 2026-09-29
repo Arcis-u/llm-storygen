@@ -174,6 +174,7 @@ export interface StoryChoice {
 export interface ChapterContent {
   story_id: string;
   chapter_number: number;
+  decision?: { label: string; action_type: string; approach: 'balanced' | 'careful' | 'bold'; risk_level: string; dice_result: number | null };
   chapter_title?: string;
   content: string;
   summary: string;
@@ -181,6 +182,27 @@ export interface ChapterContent {
   choices: StoryChoice[];
   state_changes: Record<string, unknown>;
   created_at: string;
+}
+
+export interface StoryConfig {
+  story_id: string;
+  title: string;
+  genre: string;
+  character: CharacterState;
+  quests: Quest[];
+  locations: MapLocation[];
+  available_organizations: Organization[];
+  available_shop_items: ShopItem[];
+  plot_triggers: PlotTrigger[];
+  is_ended: boolean;
+}
+
+export interface StorySnapshot {
+  story_id: string;
+  config: StoryConfig;
+  chapters: ChapterContent[];
+  is_game_over: boolean;
+  is_processing: boolean;
 }
 
 // ============================================================
@@ -194,6 +216,7 @@ interface StoryStore {
   isProcessing: boolean;
   error: string | null;
   genre: string;
+  isEnded: boolean;
 
   // --- Story Phase ---
   phase: 'idle' | 'creating' | 'customizing' | 'playing';
@@ -238,6 +261,8 @@ interface StoryStore {
     locations: MapLocation[];
   }) => void;
   resetStore: () => void;
+  hydrateStory: (data: StorySnapshot) => void;
+  completeTurn: (chapter: ChapterContent, config: StoryConfig) => void;
 }
 
 const safeCharacter = (c: Partial<CharacterState>, initial: CharacterState): CharacterState => ({
@@ -283,6 +308,7 @@ export const useStoryStore = create<StoryStore>((set) => ({
   isProcessing: false,
   error: null,
   genre: 'Cyberpunk',
+  isEnded: false,
   phase: 'idle',
   character: initialCharacter,
   chapters: [],
@@ -313,7 +339,7 @@ export const useStoryStore = create<StoryStore>((set) => ({
 
   addChapter: (chapter) =>
     set((state) => ({
-      chapters: [...state.chapters, chapter],
+      chapters: [...state.chapters.filter(c => c.chapter_number !== chapter.chapter_number), chapter].sort((a,b) => a.chapter_number-b.chapter_number),
       currentChoices: chapter.choices,
     })),
 
@@ -326,7 +352,7 @@ export const useStoryStore = create<StoryStore>((set) => ({
 
   updateFullState: (data) =>
     set((state) => ({
-      chapters: [...state.chapters, data.chapter],
+      chapters: [...state.chapters.filter(c => c.chapter_number !== data.chapter.chapter_number), data.chapter].sort((a,b) => a.chapter_number-b.chapter_number),
       currentChoices: data.chapter.choices,
       character: safeCharacter(data.character, initialCharacter),
       quests: data.quests,
@@ -336,12 +362,34 @@ export const useStoryStore = create<StoryStore>((set) => ({
       plotTriggers: (data as Record<string, unknown>).plot_triggers as PlotTrigger[] || state.plotTriggers,
       isLoading: false,
       isProcessing: false,
+      isEnded: Boolean((data as Record<string, unknown>).is_game_over),
     })),
+
+  hydrateStory: (data) => set({
+    storyId: data.story_id, genre: data.config.genre, phase: 'playing',
+    character: safeCharacter(data.config.character, initialCharacter),
+    chapters: data.chapters, currentChoices: data.chapters.at(-1)?.choices || [],
+    quests: data.config.quests || [], locations: data.config.locations || [],
+    worldOrganizations: data.config.available_organizations || [], marketItems: data.config.available_shop_items || [],
+    plotTriggers: data.config.plot_triggers || [], isEnded: data.config.is_ended || data.is_game_over,
+    isLoading: false, isProcessing: data.is_processing, error: null,
+  }),
+  completeTurn: (chapter, config) => set((state) => ({
+    chapters: [...state.chapters.filter(c => c.chapter_number !== chapter.chapter_number), chapter].sort((a,b) => a.chapter_number-b.chapter_number),
+    currentChoices: config.is_ended ? [] : chapter.choices,
+    character: safeCharacter(config.character, initialCharacter),
+    quests: config.quests || [], locations: config.locations || [],
+    worldOrganizations: config.available_organizations || [], marketItems: config.available_shop_items || [],
+    plotTriggers: config.plot_triggers || [], isEnded: config.is_ended,
+    isLoading: false, isProcessing: false, error: null,
+  })),
 
   resetStore: () =>
     set({
       storyId: null,
       isLoading: false,
+      isProcessing: false,
+      isEnded: false,
       error: null,
       phase: 'idle',
       character: initialCharacter,

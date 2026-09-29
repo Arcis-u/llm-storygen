@@ -162,7 +162,8 @@ async def writer_node(state: GraphState) -> GraphState:
             print(f"[WRITER] Chapter written via plain text ({len(state['chapter_content'])} chars)")
         except Exception as e2:
             print(f"[WRITER ERROR] Both methods failed: {e2}")
-            state["chapter_content"] = "The world blurs around you. Something happened, but the details escape your grasp..."
+            state["error"] = "writer_failed"
+            state["chapter_content"] = ""
             state["chapter_title"] = "Hệ thống Lỗi"
             state["chapter_summary"] = "Error during chapter generation."
 

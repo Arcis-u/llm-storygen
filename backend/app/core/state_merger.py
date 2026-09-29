@@ -8,6 +8,7 @@ from datetime import datetime
 from app.core.database import get_mongo_db
 from app.models.schemas import StoryConfig, InventoryItem
 import traceback
+import math
 
 
 async def apply_state_changes(story_id: str, state_changes: dict, chapter_number: int) -> dict:
@@ -22,6 +23,13 @@ async def apply_state_changes(story_id: str, state_changes: dict, chapter_number
 
     config = StoryConfig(**story_doc)
     merge_log = []
+    for stat in ("hp", "energy"):
+        maximum = max(0.0, getattr(config.character, f"max_{stat}"))
+        value = getattr(config.character, stat) + _safe_float(state_changes.get(f"{stat}_change", 0))
+        setattr(config.character, stat, max(0.0, min(maximum, value)))
+    if config.character.hp <= 0 or state_changes.get("is_game_over"):
+        config.is_ended = True
+
 
     # ─── 1. PSYCHOLOGY ───────────────────────────────────────────
     try:
@@ -155,24 +163,6 @@ async def apply_state_changes(story_id: str, state_changes: dict, chapter_number
     except Exception as e:
         merge_log.append(f"[SKIP] Factions merge failed: {e}")
 
-    # ─── 6. LOCATIONS (MOVEMENT) ─────────────────────────────────
-    try:
-        new_loc_id = state_changes.get("current_location_id", "")
-        if new_loc_id:
-            found = False
-            for loc in config.locations:
-                if loc.location_id == new_loc_id:
-                    loc.is_current = True
-                    found = True
-                else:
-                    loc.is_current = False
-            if found:
-                merge_log.append(f"Location: Moved to {new_loc_id}")
-            else:
-                merge_log.append(f"Location: {new_loc_id} not found in map")
-    except Exception as e:
-        merge_log.append(f"[SKIP] Location merge failed: {e}")
-
     # ─── 7. PLOT TRIGGERS ────────────────────────────────────────
     try:
         triggered = state_changes.get("triggered_events", [])
@@ -200,12 +190,21 @@ async def apply_state_changes(story_id: str, state_changes: dict, chapter_number
                 continue
             try:
                 new_loc = MapLocation(**loc_data)
+                new_loc.is_current = False
                 config.locations.append(new_loc)
                 merge_log.append(f"World: NEW location '{new_loc.name}'")
             except Exception as e:
                 merge_log.append(f"[SKIP] Invalid new location {loc_id}: {e}")
     except Exception as e:
         merge_log.append(f"[SKIP] New locations merge failed: {e}")
+
+    # Resolve arrival after discoveries; invalid IDs must not erase the current location.
+    target_id = state_changes.get("current_location_id")
+    target = next((loc for loc in config.locations if loc.location_id == target_id and loc.is_unlocked), None)
+    if target:
+        for location in config.locations:
+            location.is_current = location.location_id == target_id
+        merge_log.append(f"Location: moved to {target_id}")
 
     # ─── 9. DYNAMIC WORLD: NEW SHOP ITEMS ────────────────────────
     try:
@@ -269,12 +268,13 @@ async def apply_state_changes(story_id: str, state_changes: dict, chapter_number
 # ─── HELPER: Safe Type Conversion ─────────────────────────────
 def _safe_float(val) -> float:
     try:
-        return float(val)
-    except (ValueError, TypeError):
+        number = float(val)
+        return number if math.isfinite(number) else 0.0
+    except (ValueError, TypeError, OverflowError):
         return 0.0
 
 def _safe_int(val) -> int:
     try:
         return int(float(val))
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, OverflowError):
         return 0
