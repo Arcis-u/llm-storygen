@@ -7,6 +7,25 @@ Supports: HuggingFace (primary), Google Gemini, Groq, OpenAI, Anthropic.
 from app.core.config import get_settings
 
 
+def with_structured_output(llm, schema, *, include_raw: bool = False):
+    """Use forced tool output without Qwen hybrid thinking conflicts.
+
+    Copy the client configuration so plain-text calls keep their thinking policy.
+    Qwen thinking mode rejects the named tool_choice used for schema output.
+    """
+    model_parts = getattr(llm, "model_name", "").lower().split("-")
+    options = {"include_raw": include_raw}
+    if (len(model_parts) >= 2
+            and model_parts[0] in {"qwen3.5", "qwen3.6", "qwen3.7", "qwen3.8"}
+            and model_parts[1] in {"max", "plus", "flash"}):
+        llm = llm.model_copy(update={
+            "extra_body": {**(llm.extra_body or {}), "enable_thinking": False},
+        })
+        # Explicit for consistent requests across LangChain versions.
+        options["method"] = "function_calling"
+    return llm.with_structured_output(schema, **options)
+
+
 def get_llm(model_name: str, temperature: float = 0.7, max_tokens: int = None):
     """
     Returns the appropriate LangChain Chat model instance based on the model_name prefix.

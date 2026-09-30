@@ -107,3 +107,11 @@ Kiểm chứng: 36 kiểm thử backend offline đạt, gồm 13 kiểm thử m�
 Theo yêu cầu người dùng, đổi `DIRECTOR_MODEL` và `WRITER_MODEL` trong cấu hình cục bộ từ `alibaba/qwen3.7-plus` sang `alibaba/qwen3.8-max`; cập nhật hai vai trò này trong `.env.example`. Critic dùng chung `DIRECTOR_MODEL` nên cũng chuyển sang Max. Editor/GameMaster vẫn dùng Qwen 3.8 Flash; embedding Qwen 3.7 ở 2048 chiều, endpoint và dữ liệu truyện được giữ nguyên. `.env` riêng không được đưa lên Git.
 
 Kiểm chứng: Settings nạp đúng model và factory gửi tên API `qwen3.8-max` qua endpoint hiện có. Hai yêu cầu thật bằng LangChain đã trả lời thành công: văn bản ở giới hạn 2048 token và `CriticOutput` có cấu trúc ở giới hạn 500 token, đều kết thúc bình thường. 36 kiểm thử backend offline đạt. Chưa chạy toàn bộ lượt sinh truyện hay đo chất lượng/độ trễ của Max so với Plus.
+
+## Qwen thinking và đầu ra có cấu trúc — 30/09/2026
+
+Render báo lỗi `tool_choice` khi State Extractor gọi Qwen 3.8 Flash ở thinking mode. LangChain ép gọi tool theo tên để lấy dữ liệu đúng schema; Alibaba không cho kết hợp lựa chọn tool bắt buộc này với thinking mode. JSON text dự phòng vẫn có thể tiếp tục lượt, nhưng thêm một yêu cầu model và không bảo đảm nguyên nhân đã được xử lý.
+
+Thêm helper đầu ra có cấu trúc dùng chung cho State Extractor, Writer và Critic. Với các model Qwen hybrid Max/Plus/Flash thuộc 3.5–3.8, helper sao chép cấu hình client, gửi `extra_body={"enable_thinking": false}` và chọn rõ `function_calling` cho yêu cầu schema. Giữ các trường extra_body khác; client gốc và lời gọi lập kế hoạch Director không bị đổi chính sách thinking. Các provider/model khác giữ phương thức structured output hiện có. Không đổi env, model, embedding hay dữ liệu truyện.
+
+Kiểm chứng: dùng đúng `langchain-openai==0.2.7` đã ghim trên Render, tái hiện lỗi 400 thật với Flash khi thinking bật và ép tool; sau sửa, ba schema thật `StateDiff` (Flash), `WriterOutput` và `CriticOutput` (Max) đều phân tích thành công. StateDiff trích đúng mất 10 HP từ cảnh thử. 39 kiểm thử backend đạt, gồm kiểm tra ba schema, State Extractor thành công ngay lần gọi đầu, không đổi client gốc và không áp tham số Qwen cho model khác. Kiểm tra API là các yêu cầu nhỏ độc lập, chưa chạy toàn bộ lượt truyện trên Render.

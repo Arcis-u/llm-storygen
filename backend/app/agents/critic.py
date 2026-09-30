@@ -50,7 +50,7 @@ async def critic_node(state: GraphState) -> GraphState:
         state["critic_passed"] = True
         return state
 
-    from app.core.llm_factory import get_llm
+    from app.core.llm_factory import get_llm, with_structured_output
     # Use a fast, cheap model for the critic if possible
     llm = get_llm(settings.director_model, temperature=0.1, max_tokens=500)
 
@@ -59,7 +59,7 @@ async def critic_node(state: GraphState) -> GraphState:
     )
 
     try:
-        structured_llm = llm.with_structured_output(CriticOutput)
+        structured_llm = with_structured_output(llm, CriticOutput)
         messages = [
             SystemMessage(content=prompt_str),
             HumanMessage(content="Evaluate the text now.")

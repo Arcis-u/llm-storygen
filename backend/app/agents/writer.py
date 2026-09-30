@@ -5,8 +5,6 @@ Uses Claude 3.5 Sonnet for maximum literary quality.
 Does NOT handle logic — only crafts beautiful narrative text.
 """
 
-from langchain_openai import ChatOpenAI
-from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import SystemMessage, HumanMessage
 from pydantic import BaseModel, Field
 
@@ -92,7 +90,7 @@ async def writer_node(state: GraphState) -> GraphState:
         state["chapter_summary"] = "The character entered a mysterious building and sensed danger."
         return state
 
-    from app.core.llm_factory import get_llm
+    from app.core.llm_factory import get_llm, with_structured_output
     llm = get_llm(settings.writer_model, temperature=0.75, max_tokens=2048)
 
     config = state["story_config"]
@@ -111,7 +109,7 @@ async def writer_node(state: GraphState) -> GraphState:
 
     try:
         # Try structured output first (works with OpenAI, Gemini)
-        structured_llm = llm.with_structured_output(WriterOutput)
+        structured_llm = with_structured_output(llm, WriterOutput)
         messages = [
             SystemMessage(content=prompt_str),
             HumanMessage(content="Write the chapter now. Make it unforgettable.")

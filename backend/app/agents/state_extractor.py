@@ -5,7 +5,6 @@ Also determines if the character died (Game Over flag).
 Uses GPT-4o-mini for speed and cost efficiency.
 """
 
-from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
 from pydantic import BaseModel, Field
 import json
@@ -126,7 +125,7 @@ async def state_extractor_node(state: GraphState) -> GraphState:
         state["is_game_over"] = False
         return state
 
-    from app.core.llm_factory import get_llm
+    from app.core.llm_factory import get_llm, with_structured_output
     llm = get_llm(settings.editor_model, temperature=0.1)
 
     config = state["story_config"]
@@ -158,7 +157,7 @@ async def state_extractor_node(state: GraphState) -> GraphState:
 
     try:
         # Try structured output first
-        structured_llm = llm.with_structured_output(StateDiff)
+        structured_llm = with_structured_output(llm, StateDiff)
         messages = [
             SystemMessage(content=prompt_str),
             HumanMessage(content=f"Chapter text:\n\n{state.get('chapter_content', '')}")
