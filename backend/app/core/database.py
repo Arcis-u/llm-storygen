@@ -5,7 +5,7 @@ Provides async MongoDB client and Qdrant client with connection lifecycle manage
 
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams
+from qdrant_client.models import Distance, VectorParams, PointStruct
 from app.core.config import get_settings
 from pymongo.errors import PyMongoError
 import asyncio
@@ -163,4 +163,35 @@ async def save_story_memory(
         ]
     )
     print(f"[DB] Saved memory chunk for story {story_id}, chapter {chapter_number}")
+
+
+async def save_chapter_memories(chapter, entries: list[dict], vectors: list[list[float]], collection_name: str | None = None) -> None:
+    """Upsert this chapter's summary and passages with repeatable IDs."""
+    from app.services.embedding import get_embedding_dimension
+    from app.services.story_memory import memory_point_id
+    if len(entries) != len(vectors):
+        raise ValueError("Memory entry and vector counts differ")
+    if not entries:
+        return
+    settings = get_settings()
+    points = []
+    for entry, vector in zip(entries, vectors):
+        if len(vector) != get_embedding_dimension():
+            raise ValueError("Memory vector dimension does not match configuration")
+        points.append(PointStruct(
+            id=memory_point_id(chapter.story_id, chapter.chapter_number, entry["kind"], entry["index"]),
+            vector=vector,
+            payload={
+                "story_id": chapter.story_id,
+                "chapter_number": chapter.chapter_number,
+                "text": entry["text"],
+                "memory_kind": entry["kind"],
+                "chunk_index": entry["index"],
+                "embedding_model": settings.embedding_model,
+                "embedding_dimensions": get_embedding_dimension(),
+            },
+        ))
+    await asyncio.to_thread(get_qdrant().upsert,
+                           collection_name=collection_name or settings.qdrant_collection_name,
+                           points=points, wait=True)
 

@@ -5,6 +5,7 @@ from app.graph.state import GraphState
 from app.core.database import get_qdrant
 from app.services.embedding import get_text_embedding
 from app.core.config import get_settings
+from app.services.story_memory import select_memories
 
 logger = logging.getLogger(__name__)
 
@@ -17,10 +18,10 @@ async def memory_retrieval_node(state: GraphState) -> GraphState:
             hits = await asyncio.to_thread(
                 get_qdrant().search,
                 collection_name=get_settings().qdrant_collection_name,
-                query_vector=vector, limit=5,
+                query_vector=vector, limit=12,
                 query_filter={'must':[{'key':'story_id','match':{'value':story_id}}]},
             )
-            recalled = [hit.payload.get('text', '') for hit in hits if hit.score > .3 and hit.payload]
+            recalled = select_memories(hits)
             state['relevant_memories'] = list(dict.fromkeys(recent + recalled))
     except Exception:
         logger.warning('Long-term memory unavailable; keeping recent chapter context for %s', story_id)

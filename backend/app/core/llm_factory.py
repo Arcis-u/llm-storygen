@@ -19,7 +19,7 @@ def get_llm(model_name: str, temperature: float = 0.7, max_tokens: int = None):
     # Docs: https://www.alibabacloud.com/help/en/model-studio/qwen-api-via-openai-chat-completions
     # base_url: https://dashscope-intl.aliyuncs.com/compatible-mode/v1 (Singapore region)
     # Model names: qwen3.6-plus, qwen-plus, qwen-max, etc.
-    if "alibaba/" in model_lower or "qwen" in model_lower:
+    if model_lower.startswith("alibaba/") or ("qwen" in model_lower and not model_lower.startswith("hf/")):
         if not settings.alibaba_api_key:
             raise ValueError(f"ALIBABA_API_KEY is missing for model {model_name}")
         
@@ -30,7 +30,7 @@ def get_llm(model_name: str, temperature: float = 0.7, max_tokens: int = None):
         return ChatOpenAI(
             model=actual_model,
             api_key=settings.alibaba_api_key,
-            base_url="https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+            base_url=settings.alibaba_base_url,
             temperature=temperature,
             max_tokens=max_tokens
         )

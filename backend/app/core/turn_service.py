@@ -2,7 +2,7 @@
 import asyncio
 import logging
 from fastapi import HTTPException
-from app.core.database import get_mongo_db, save_story_memory
+from app.core.database import get_mongo_db, save_chapter_memories
 from app.core.state_merger import apply_state_changes
 from app.models.schemas import ChapterContent, StoryChoice
 
@@ -39,10 +39,11 @@ async def persist_turn(request, story, final_state, decision):
 
 async def index_chapter(chapter):
     try:
-        from app.services.embedding import get_text_embedding
-        async with asyncio.timeout(8):
-            vector = await get_text_embedding(chapter.summary or chapter.content[:1000])
-            await save_story_memory(story_id=chapter.story_id, chapter_number=chapter.chapter_number,
-                                    text_content=chapter.content[:2000], embedding_vector=vector)
+        from app.services.embedding import get_text_embeddings
+        from app.services.story_memory import chapter_memories
+        async with asyncio.timeout(20):
+            entries = chapter_memories(chapter)
+            vectors = await get_text_embeddings([entry["text"] for entry in entries])
+            await save_chapter_memories(chapter, entries, vectors)
     except Exception:
         logger.warning("Memory indexing failed for chapter %s", chapter.chapter_number, exc_info=True)

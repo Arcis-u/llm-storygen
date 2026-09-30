@@ -6,6 +6,7 @@ Loads environment variables and provides typed settings across the application.
 from pydantic_settings import BaseSettings
 from pydantic import Field
 from functools import lru_cache
+from pathlib import Path
 
 
 class Settings(BaseSettings):
@@ -35,6 +36,7 @@ class Settings(BaseSettings):
     groq_api_key: str = Field(default="")
     huggingface_api_key: str = Field(default="")
     alibaba_api_key: str = Field(default="")
+    alibaba_base_url: str = Field(default="https://dashscope-intl.aliyuncs.com/compatible-mode/v1")
 
     # --- AI Model Selection ---
     director_model: str = Field(default="hf/Qwen/Qwen2.5-72B-Instruct")
@@ -42,9 +44,10 @@ class Settings(BaseSettings):
     editor_model: str = Field(default="hf/mistralai/Mistral-Small-24B-Instruct-2501")
     gamemaster_model: str = Field(default="hf/mistralai/Mistral-Small-24B-Instruct-2501")
     embedding_model: str = Field(default="sentence-transformers/all-MiniLM-L6-v2")
+    embedding_dimensions: int | None = Field(default=None, gt=0)
 
     model_config = {
-        "env_file": ".env",
+        "env_file": str(Path(__file__).resolve().parents[2] / ".env"),
         "env_file_encoding": "utf-8",
         "extra": "ignore",
     }

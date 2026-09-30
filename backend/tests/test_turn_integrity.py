@@ -11,15 +11,19 @@ from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
 # Isolate infrastructure: no API keys, network, or production database are used.
+_infrastructure_modules = {name: sys.modules.get(name) for name in
+                           ['app.core.database', 'app.graph.workflow', 'app.services.embedding']}
 database = types.ModuleType('app.core.database')
 database.get_mongo_db = AsyncMock()
 database.save_story_memory = AsyncMock()
+database.save_chapter_memories = AsyncMock()
 sys.modules['app.core.database'] = database
 workflow = types.ModuleType('app.graph.workflow')
 workflow.story_pipeline = types.SimpleNamespace(ainvoke=AsyncMock(), astream_events=None)
 sys.modules['app.graph.workflow'] = workflow
 embedding = types.ModuleType('app.services.embedding')
 embedding.get_text_embedding = AsyncMock(return_value=[0.0])
+embedding.get_text_embeddings = AsyncMock(return_value=[[1.0]])
 sys.modules['app.services.embedding'] = embedding
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks
@@ -30,6 +34,13 @@ from app.core.state_merger import apply_state_changes, _safe_float, _safe_int
 from app.core.story_access import story_mutation, require_story_access
 from app.core.security import get_current_user
 from app.api import stream_story, story as story_api
+
+# Keep these routes' captured fakes, without replacing modules for other test files.
+for _name, _original in _infrastructure_modules.items():
+    if _original is None:
+        sys.modules.pop(_name, None)
+    else:
+        sys.modules[_name] = _original
 
 
 def make_story():
