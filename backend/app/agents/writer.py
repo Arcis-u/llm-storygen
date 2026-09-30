@@ -91,7 +91,8 @@ async def writer_node(state: GraphState) -> GraphState:
         return state
 
     from app.core.llm_factory import get_llm, with_structured_output
-    llm = get_llm(settings.writer_model, temperature=0.75, max_tokens=2048)
+    # Leave room for reasoning and the requested 300–500 word chapter.
+    llm = get_llm(settings.writer_model, temperature=0.75, max_tokens=8192)
 
     config = state["story_config"]
     relevant_memories = state.get("relevant_memories", [])

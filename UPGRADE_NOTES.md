@@ -108,10 +108,20 @@ Theo yêu cầu người dùng, đổi `DIRECTOR_MODEL` và `WRITER_MODEL` trong
 
 Kiểm chứng: Settings nạp đúng model và factory gửi tên API `qwen3.8-max` qua endpoint hiện có. Hai yêu cầu thật bằng LangChain đã trả lời thành công: văn bản ở giới hạn 2048 token và `CriticOutput` có cấu trúc ở giới hạn 500 token, đều kết thúc bình thường. 36 kiểm thử backend offline đạt. Chưa chạy toàn bộ lượt sinh truyện hay đo chất lượng/độ trễ của Max so với Plus.
 
-## Qwen thinking và đầu ra có cấu trúc — 30/09/2026
+## Qwen thinking và đầu ra có cấu trúc — 30/09/2026 (đã thay thế)
+
+Quyết định tắt thinking trong mục này đã được thay thế theo yêu cầu người dùng; cấu hình hiện tại bật thinking cho tất cả lời gọi Qwen hybrid, như mục bên dưới.
 
 Render báo lỗi `tool_choice` khi State Extractor gọi Qwen 3.8 Flash ở thinking mode. LangChain ép gọi tool theo tên để lấy dữ liệu đúng schema; Alibaba không cho kết hợp lựa chọn tool bắt buộc này với thinking mode. JSON text dự phòng vẫn có thể tiếp tục lượt, nhưng thêm một yêu cầu model và không bảo đảm nguyên nhân đã được xử lý.
 
 Thêm helper đầu ra có cấu trúc dùng chung cho State Extractor, Writer và Critic. Với các model Qwen hybrid Max/Plus/Flash thuộc 3.5–3.8, helper sao chép cấu hình client, gửi `extra_body={"enable_thinking": false}` và chọn rõ `function_calling` cho yêu cầu schema. Giữ các trường extra_body khác; client gốc và lời gọi lập kế hoạch Director không bị đổi chính sách thinking. Các provider/model khác giữ phương thức structured output hiện có. Không đổi env, model, embedding hay dữ liệu truyện.
 
 Kiểm chứng: dùng đúng `langchain-openai==0.2.7` đã ghim trên Render, tái hiện lỗi 400 thật với Flash khi thinking bật và ép tool; sau sửa, ba schema thật `StateDiff` (Flash), `WriterOutput` và `CriticOutput` (Max) đều phân tích thành công. StateDiff trích đúng mất 10 HP từ cảnh thử. 39 kiểm thử backend đạt, gồm kiểm tra ba schema, State Extractor thành công ngay lần gọi đầu, không đổi client gốc và không áp tham số Qwen cho model khác. Kiểm tra API là các yêu cầu nhỏ độc lập, chưa chạy toàn bộ lượt truyện trên Render.
+
+## Thinking bật cho toàn bộ Qwen — 30/09/2026
+
+Theo yêu cầu người dùng, bỏ việc tắt thinking ở Writer, Critic và State Extractor. Factory gửi rõ `extra_body={"enable_thinking": true}` cho mọi lời gọi Qwen hybrid Max/Plus/Flash, bao gồm Director, Writer, Critic, State Extractor, GameMaster và các chức năng phụ dùng chung factory. Helper schema cũng giữ thinking bật ở mọi nhánh.
+
+Với Qwen 3.7/3.8, dùng đầu ra JSON Schema native qua `response_format` thay cho ép `tool_choice`; tiếp tục kiểm tra bằng Pydantic. Với dòng hybrid cũ, dùng JSON mode có schema trong prompt và kiểm tra phía ứng dụng, vẫn giữ thinking. Provider khác giữ phương thức hiện có. Tăng giới hạn token Writer lên 8192, Critic và Director lên 4096 để có chỗ cho suy luận và kết quả, thay cho giới hạn Writer/Director 2048 và Critic 500. Không đặt giới hạn `thinking_budget` riêng, không đổi model hay env. Nguồn: [Alibaba structured output](https://www.alibabacloud.com/help/en/model-studio/qwen-structured-output).
+
+Kiểm chứng: 43 kiểm thử backend đạt, bao gồm request JSON Schema với thinking bật cho cả ba schema, các node Writer/Critic/State Extractor, JSON mode của dòng cũ, factory bật thinking cho các vai trò và event stream không lộ reasoning. Gọi API thật với LangChain 0.2.7: ba schema trả dữ liệu hợp lệ và API ghi nhận token reasoning. Chạy thêm ba node thật liên tiếp trên cảnh thử không lưu dữ liệu: Writer tạo 1949 ký tự với 3187 token reasoning; Critic trả đánh giá với 199 token reasoning; State Extractor trả thay đổi với 4730 token reasoning. Mỗi node chỉ gọi một lần, không đi qua fallback. Chưa kiểm tra toàn bộ lượt truyện trên Render. LangChain 0.2.7 xử lý JSON Schema Pydantic bằng phản hồi hoàn chỉnh và có cảnh báo chưa hỗ trợ token streaming cho dạng này; SSE của ứng dụng vẫn gửi tiến trình và nội dung đã phân tích như hiện tại.

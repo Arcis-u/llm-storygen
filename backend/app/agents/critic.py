@@ -51,8 +51,8 @@ async def critic_node(state: GraphState) -> GraphState:
         return state
 
     from app.core.llm_factory import get_llm, with_structured_output
-    # Use a fast, cheap model for the critic if possible
-    llm = get_llm(settings.director_model, temperature=0.1, max_tokens=500)
+    # Allow reasoning plus a complete verdict and feedback.
+    llm = get_llm(settings.director_model, temperature=0.1, max_tokens=4096)
 
     prompt_str = CRITIC_PROMPT.format(
         chapter_content=state.get("chapter_content", "")

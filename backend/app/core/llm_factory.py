@@ -7,22 +7,42 @@ Supports: HuggingFace (primary), Google Gemini, Groq, OpenAI, Anthropic.
 from app.core.config import get_settings
 
 
-def with_structured_output(llm, schema, *, include_raw: bool = False):
-    """Use forced tool output without Qwen hybrid thinking conflicts.
+def _is_qwen_hybrid(model_name: str) -> bool:
+    parts = model_name.lower().split("-")
+    return (len(parts) >= 2
+            and parts[0] in {"qwen3.5", "qwen3.6", "qwen3.7", "qwen3.8"}
+            and parts[1] in {"max", "plus", "flash"})
 
-    Copy the client configuration so plain-text calls keep their thinking policy.
-    Qwen thinking mode rejects the named tool_choice used for schema output.
+
+def with_structured_output(llm, schema, *, include_raw: bool = False):
+    """Keep Qwen thinking enabled and request JSON rather than force a tool.
+
+    Qwen 3.7/3.8 support native JSON Schema with thinking. Older hybrid models
+    use JSON mode with an explicit schema in the prompt and local validation.
     """
-    model_parts = getattr(llm, "model_name", "").lower().split("-")
+    model_name = getattr(llm, "model_name", "") or ""
     options = {"include_raw": include_raw}
-    if (len(model_parts) >= 2
-            and model_parts[0] in {"qwen3.5", "qwen3.6", "qwen3.7", "qwen3.8"}
-            and model_parts[1] in {"max", "plus", "flash"}):
+    if _is_qwen_hybrid(model_name):
         llm = llm.model_copy(update={
-            "extra_body": {**(llm.extra_body or {}), "enable_thinking": False},
+            "extra_body": {**(llm.extra_body or {}), "enable_thinking": True},
         })
-        # Explicit for consistent requests across LangChain versions.
-        options["method"] = "function_calling"
+        if model_name.lower().startswith(("qwen3.7-", "qwen3.8-")):
+            options["method"] = "json_schema"
+        else:
+            import json
+            from langchain_core.messages import HumanMessage, SystemMessage
+            from langchain_core.runnables import RunnableLambda
+
+            instruction = "Return ONLY JSON matching this schema:\n" + json.dumps(schema.model_json_schema())
+
+            def schema_messages(value):
+                messages = ([HumanMessage(content=value)] if isinstance(value, str)
+                            else value.to_messages() if hasattr(value, "to_messages") else list(value))
+                return [SystemMessage(content=instruction), *messages]
+
+            return RunnableLambda(schema_messages) | llm.with_structured_output(
+                schema, method="json_mode", **options,
+            )
     return llm.with_structured_output(schema, **options)
 
 
@@ -44,6 +64,7 @@ def get_llm(model_name: str, temperature: float = 0.7, max_tokens: int = None):
         
         # Strip "alibaba/" prefix — DashScope API only accepts bare model names like "qwen3.6-plus"
         actual_model = model_name.replace("alibaba/", "").replace("ALIBABA/", "")
+        thinking_options = {"extra_body": {"enable_thinking": True}} if _is_qwen_hybrid(actual_model) else {}
         
         from langchain_openai import ChatOpenAI
         return ChatOpenAI(
@@ -51,7 +72,8 @@ def get_llm(model_name: str, temperature: float = 0.7, max_tokens: int = None):
             api_key=settings.alibaba_api_key,
             base_url=settings.alibaba_base_url,
             temperature=temperature,
-            max_tokens=max_tokens
+            max_tokens=max_tokens,
+            **thinking_options,
         )
 
     # 2. HuggingFace Inference API (for open-source models)

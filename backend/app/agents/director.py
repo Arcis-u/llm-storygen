@@ -266,7 +266,7 @@ async def director_node(state: GraphState) -> GraphState:
 
     # ─── 6. Choose LLM ───
     from app.core.llm_factory import get_llm
-    llm = get_llm(settings.director_model, temperature=0.5, max_tokens=2048)
+    llm = get_llm(settings.director_model, temperature=0.5, max_tokens=4096)
 
     # ─── 7. Single JSON Generation (Optimized for speed) ───
     messages = [
