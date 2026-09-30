@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, Suspense } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { useSearchParams } from "next/navigation";
 import {
   Brain,
@@ -14,6 +14,7 @@ import {
   ChevronRight,
   ChevronLeft,
   ChevronDown,
+  ChevronUp,
   Layers,
   BookOpen,
   Send,
@@ -543,7 +544,7 @@ function QuestMapPanel() {
 // ============================================================
 // Center Panel: Story & Choices
 // ============================================================
-function StoryPanel() {
+function StoryPanel({ focusMode, onToggleFocus }: { focusMode: boolean; onToggleFocus: () => void }) {
   const { chapters, currentChoices, isLoading, isProcessing, storyId, isEnded, error, genre } = useStoryStore();
   const { setLoading, setIsProcessing, setError } = useStoryStore();
   const isBusy = isLoading || isProcessing;
@@ -555,8 +556,15 @@ function StoryPanel() {
   const controller = useRef<AbortController | null>(null);
   const [customInput, setCustomInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
-  const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => { controller.current?.abort(); if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current); }, []);
+  const decisionRef = useRef<HTMLDivElement>(null);
+  const draftRef = useRef<HTMLDivElement>(null);
+  const reducedMotion = useReducedMotion();
+  const jumpTo = (element: HTMLElement | null) => {
+    element?.scrollIntoView({ behavior: reducedMotion ? "instant" : "smooth", block: "start" });
+    element?.focus({ preventScroll: true });
+  };
+  const previousChapterRef = useRef<number | null>(null);
+  useEffect(() => () => { controller.current?.abort(); }, []);
   const [selectedChapter, setActiveChapter] = useState<number | null>(null);
   const [isTocOpen, setIsTocOpen] = useState(false);
   const [readMode, setReadMode] = useState<"continuous" | "single">("single");
@@ -571,51 +579,53 @@ function StoryPanel() {
 
   useEffect(() => {
     if (!latestChapter) return;
+    const chapterChanged = previousChapterRef.current !== null && previousChapterRef.current !== latestChapter.chapter_number;
+    previousChapterRef.current = latestChapter.chapter_number;
     audioEngine.playBGM(latestChapter.tone || "ambient");
     const frame = requestAnimationFrame(() => {
       if (!scrollRef.current) return;
-      const reader = scrollRef.current.closest<HTMLElement>(".story-reader");
       if (readMode === "single") {
-        scrollRef.current.scrollTop = 0;
-        if (reader && getComputedStyle(reader).display === "block") reader.scrollTop = 0;
+        scrollRef.current.scrollTo({ top: 0, behavior: "instant" });
+        if (chapterChanged && window.matchMedia('(max-width: 760px)').matches) {
+          scrollRef.current.scrollIntoView({ behavior: "instant", block: "start" });
+        }
       }
-      else if (selectedChapter === null) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      else if (selectedChapter === null) document.getElementById(`chapter-${latestChapter.chapter_number}`)?.scrollIntoView({ behavior: "instant", block: "start" });
     });
     return () => cancelAnimationFrame(frame);
   }, [latestChapter, readMode, selectedChapter]);
 
-  const handleScroll = () => {
-    if (readMode !== "continuous") return; // Only track scroll in continuous mode
-    if (!scrollRef.current) return;
-    
-    if (scrollTimeoutRef.current) return; // Throttled
-
-    scrollTimeoutRef.current = setTimeout(() => {
-      scrollTimeoutRef.current = null;
-      if (!scrollRef.current) return;
-      
-      const container = scrollRef.current;
-      const chapterElements = container.querySelectorAll('.chapter-container');
-      const containerRect = container.getBoundingClientRect();
-      
-      // The "reading line" is 40% down from the top of the container
-      const triggerY = containerRect.top + containerRect.height * 0.4; 
-
-      let newActive = activeChapter;
-      chapterElements.forEach((el) => {
-        const rect = el.getBoundingClientRect();
-        // If the top of the chapter has scrolled past the reading line
-        if (rect.top <= triggerY) {
-          const chapterNum = parseInt(el.getAttribute('data-chapter') || "1");
-          newActive = chapterNum;
-        }
+  useEffect(() => {
+    const container = scrollRef.current;
+    if (readMode !== "continuous" || !container) return;
+    let frame = 0;
+    const trackReading = () => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        const bounds = container.getBoundingClientRect();
+        const mobile = window.matchMedia('(max-width: 760px)').matches;
+        const headerBottom = document.querySelector(".play-masthead")?.getBoundingClientRect().bottom || 0;
+        const top = Math.max(bounds.top, mobile ? headerBottom + 12 : 0);
+        const bottom = Math.min(bounds.bottom, window.innerHeight - (mobile ? 55 : 0));
+        if (bottom <= top) return;
+        const readingLine = top + (bottom - top) * .35;
+        let visibleChapter = activeChapter;
+        container.querySelectorAll<HTMLElement>('.chapter-container').forEach(element => {
+          if (element.getBoundingClientRect().top <= readingLine) visibleChapter = Number(element.dataset.chapter);
+        });
+        if (visibleChapter !== activeChapter) setActiveChapter(visibleChapter);
       });
-
-      if (newActive !== activeChapter) {
-        setActiveChapter(newActive);
-      }
-    }, 100); // 100ms throttle
-  };
+    };
+    // Desktop scrolls the panel; touch layouts scroll the document.
+    container.addEventListener('scroll', trackReading, { passive: true });
+    window.addEventListener('scroll', trackReading, { passive: true });
+    return () => {
+      container.removeEventListener('scroll', trackReading);
+      window.removeEventListener('scroll', trackReading);
+      cancelAnimationFrame(frame);
+    };
+  }, [readMode, activeChapter]);
 
 
   const handleChoice = async (choiceId: number, riskLevel?: "normal" | "risky" | "crucial") => {
@@ -677,6 +687,7 @@ function StoryPanel() {
       }}
     >
       <div
+        className="reader-toolbar"
         style={{
           display: "flex",
           alignItems: "center",
@@ -831,7 +842,6 @@ function StoryPanel() {
       <div
         className="story-scroll"
         ref={scrollRef}
-        onScroll={handleScroll}
         style={{
           flex: 1,
           overflowY: "auto",
@@ -859,10 +869,11 @@ function StoryPanel() {
             <p style={{ fontSize: "0.85rem" }}>Nhập hành động khởi đầu của bạn vào terminal bên dưới.</p>
           </div>
         ) : (
-          <AnimatePresence mode="wait">
+          <AnimatePresence key={readMode} mode={readMode === "single" ? "wait" : "sync"}>
             {(readMode === "continuous" ? chapters : chapters.filter(c => c.chapter_number === activeChapter)).map((ch, i) => (
               <motion.div
                 id={`chapter-${ch.chapter_number}`}
+                tabIndex={-1}
                 key={`ch-${ch.chapter_number}`}
                 className="chapter-container"
                 data-chapter={ch.chapter_number}
@@ -897,6 +908,9 @@ function StoryPanel() {
         {isBusy && <div className="stream-status" role="status"><Loader2 size={15} className="animate-spin"/>{streamStatus || "Đang xử lý lượt chơi…"}</div>}
         {isBusy && (
           <motion.div
+            ref={draftRef}
+            tabIndex={-1}
+            className="reader-draft"
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             style={{
@@ -928,11 +942,9 @@ function StoryPanel() {
             )}
           </motion.div>
         )}
-      </div>
-
-      {/* Action Input Area (Sticky Bottom) */}
+      {/* Decisions follow the prose, inside the same reading scroll area. */}
       {!isBusy && !isEnded && chapters.length > 0 && (
-        <motion.div className="decision-dock"
+        <motion.div className="decision-dock" ref={decisionRef} tabIndex={-1} aria-label="Lựa chọn cho chương tiếp theo"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           style={{ 
@@ -1045,6 +1057,15 @@ function StoryPanel() {
 
       {error && <div className="cyber-alert" role="alert">{error}<button className="btn-secondary" onClick={() => window.location.reload()}>Tải lại tiến trình</button></div>}
       {isEnded && <div className="cyber-alert ending-banner"><BookOpen size={20}/><div><strong>Hành trình đã khép lại.</strong><p>Bạn vẫn có thể đọc lại các chương và lưu nhật ký quyết định.</p></div><Link href="/dashboard">Về thư viện</Link></div>}
+      </div>
+      {chapters.length > 0 && <nav className="reader-wayfinding" aria-label="Công cụ đọc truyện">
+        <span className="reader-position"><BookOpen size={14}/><span>Chương {activeChapter}<small> / {latestChapter?.chapter_number}</small></span></span>
+        <div>
+          <button className="reader-focus-control" onClick={onToggleFocus} aria-pressed={focusMode}>{focusMode ? <Minimize2 size={14}/> : <Maximize2 size={14}/>}<span>{focusMode ? "Hiện HUD" : "Ẩn HUD"}</span></button>
+          <button onClick={() => jumpTo(document.getElementById(`chapter-${activeChapter}`))}><ChevronUp size={15}/><span>Đầu chương</span></button>
+          {!isEnded && <button className="reader-next-control" onClick={() => jumpTo(isBusy ? draftRef.current : decisionRef.current)}><span>{isBusy ? "Phần đang viết" : "Đến lựa chọn"}</span><ChevronDown size={15}/></button>}
+        </div>
+      </nav>}
       <DiceRoller isOpen={pendingChoice !== null} riskLevel={pendingChoice?.risk || "risky"}
         result={diceValue} rolling={isBusy}
         onConfirm={() => {if (pendingChoice) void executeChoice(pendingChoice.id);}}
@@ -1061,6 +1082,13 @@ function PlayContent() {
   const storyId = params.get("id") || "";
   const setIsProcessing = useStoryStore(s => s.setIsProcessing);
   const [mainTab, setMainTab] = useState<"story" | "map" | "relations" | "timeline" | "market" | "factions" | "journal">("story");
+  useEffect(() => {
+    // Reset after the tab has rendered, cancelling any in-flight reading scroll.
+    const frame = requestAnimationFrame(() => {
+      if (window.matchMedia('(max-width: 760px)').matches) window.scrollTo({ top: 0, behavior: "instant" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [mainTab]);
   
   // Connect to store for the other tabs
   const { locations, character, plotTriggers, chapters, marketItems, worldOrganizations, updateFullState, setLoading, setError, isLoading, isProcessing, genre } = useStoryStore();
@@ -1163,9 +1191,28 @@ function PlayContent() {
   if (booting) return <main id="main-content" className="cyber-empty"><Loader2 className="animate-spin"/> Đang đồng bộ câu chuyện…</main>;
   if (loadError) return <main id="main-content" className="cyber-empty"><p>{loadError}</p><button className="btn-secondary" onClick={() => window.location.reload()}>Thử lại</button><Link href="/dashboard">Về thư viện</Link></main>;
   return (
-    <div id="main-content" className={`split-layout nexus-play nexus-play-evolved ${themeClass} ${focusMode ? 'focus-mode' : ''} ${mobileHud ? 'hud-open' : ''} ${illustrations ? '' : 'no-scene-illustrations'} ${typeface === 'sans' ? 'reader-sans' : ''}`} style={{maxWidth:"100%",padding:"1rem 2rem",position:"relative",'--reader-size':`${fontSize}px`,'--reader-measure':measure === 'wide' ? '980px' : '740px'} as React.CSSProperties}>
-      <header className="play-masthead"><Link href="/dashboard" className="play-brand">N<span>↗</span><b>NEXUS <i>TALE</i></b></Link><div className="play-context"><span>{worldFor(genre).name}</span><i/><strong>{locations.find(l => l.is_current)?.name || "Hành trình của bạn"}</strong></div><span className="play-session-state"><span className="signal-dot"/>{isProcessing || isLoading ? "ĐANG DIỄN TIẾN" : isEnded ? "ĐÃ KHÉP LẠI" : "ĐANG NHẬP VAI"}</span></header>
-      <div className="play-utility"><button className="cyber-icon-button mobile-hud-toggle" onClick={() => setMobileHud(v => !v)} aria-expanded={mobileHud} aria-label="Mở trạng thái nhân vật"><Users size={17}/></button><Link className="cyber-icon-button" href="/dashboard" data-tip="Thư viện" aria-label="Về thư viện"><Home size={17}/></Link><button className="cyber-icon-button" onClick={() => setFocusMode(v => !v)} data-tip={focusMode ? "Hiện HUD" : "Tập trung đọc"} aria-label={focusMode ? "Hiện bảng trạng thái" : "Tập trung đọc"}>{focusMode ? <Minimize2 size={17}/> : <Maximize2 size={17}/>}</button><button className="cyber-icon-button" onClick={() => setReaderSettings(v => !v)} data-tip="Góc đọc của bạn" aria-expanded={readerSettings} aria-label="Cài đặt trải nghiệm đọc"><Settings size={17}/></button></div>
+    <div id="main-content" className={`split-layout nexus-play nexus-play-evolved ${themeClass} ${focusMode ? 'focus-mode' : ''} ${mobileHud ? 'hud-open' : ''} ${illustrations ? '' : 'no-scene-illustrations'} ${typeface === 'sans' ? 'reader-sans' : ''}`} style={{maxWidth:"100%",padding:"1rem 2rem",position:"relative",'--reader-size':`${fontSize}px`,'--reader-measure':measure === 'wide' ? '1120px' : '920px'} as React.CSSProperties}>
+      <header className="play-masthead">
+        <Link href="/dashboard" className="play-brand">N<span>↗</span><b>NEXUS <i>TALE</i></b></Link>
+        <div className="play-context"><span>{worldFor(genre).name}</span><strong title={locations.find(l => l.is_current)?.name}>{locations.find(l => l.is_current)?.name || "Hành trình của bạn"}</strong></div>
+        <nav className="play-navigation" aria-label="Các màn chơi">
+          {[
+            { key: "story", label: "TRUYỆN", icon: <BookOpen size={16}/> },
+            { key: "map", label: "BẢN ĐỒ", icon: <MapPin size={16}/> },
+            { key: "relations", label: "QUAN HỆ", icon: <Network size={16}/> },
+            { key: "journal", label: "NHẬT KÝ", icon: <Scroll size={16}/> },
+            { key: "timeline", label: "CỐT TRUYỆN", icon: <Route size={16}/> },
+            { key: "market", label: "CỬA HÀNG", icon: <ShoppingBag size={16}/> },
+            { key: "factions", label: "THẾ LỰC", icon: <Flag size={16}/> },
+          ].map(tab => <button key={tab.key} disabled={isLoading || isProcessing} aria-pressed={mainTab === tab.key}
+            onClick={() => setMainTab(tab.key as typeof mainTab)}>
+            {tab.icon}<span>{tab.label}</span>
+            {mainTab === tab.key && <motion.div className="play-tab-indicator" layoutId="activeTabIndicator"/>}
+          </button>)}
+        </nav>
+        <span className="play-session-state"><span className="signal-dot"/>{isProcessing || isLoading ? "ĐANG DIỄN TIẾN" : isEnded ? "ĐÃ KHÉP LẠI" : "ĐANG NHẬP VAI"}</span>
+        <div className="play-utility"><button className="cyber-icon-button mobile-hud-toggle" onClick={() => setMobileHud(v => !v)} aria-expanded={mobileHud} aria-label="Mở trạng thái nhân vật"><Users size={17}/></button><Link className="cyber-icon-button" href="/dashboard" data-tip="Thư viện" aria-label="Về thư viện"><Home size={17}/></Link><button className="cyber-icon-button" onClick={() => setFocusMode(v => !v)} data-tip={focusMode ? "Hiện HUD" : "Tập trung đọc"} aria-label={focusMode ? "Hiện bảng trạng thái" : "Tập trung đọc"}>{focusMode ? <Minimize2 size={17}/> : <Maximize2 size={17}/>}</button><button className="cyber-icon-button" onClick={() => setReaderSettings(v => !v)} data-tip="Góc đọc của bạn" aria-expanded={readerSettings} aria-label="Cài đặt trải nghiệm đọc"><Settings size={17}/></button></div>
+      </header>
       <ReaderSettings open={readerSettings} onClose={() => setReaderSettings(false)} muted={muted} onMute={() => setMuted(audioEngine.toggleMute())} />
       <div className="play-atmosphere" aria-hidden="true"><Image src={worldFor(genre).image} alt="" fill sizes="100vw" /></div>
 
@@ -1180,64 +1227,12 @@ function PlayContent() {
         </div>
       </div>
       
-      {/* CENTER COLUMN: Navigation + Active Tab Content */}
+      {/* CENTER COLUMN: Active Tab Content */}
       <div className="main-content">
         {chapters.length === 0 && <div className="cyber-alert">Câu chuyện chưa có chương mở đầu. <Link href={`/customize?id=${encodeURIComponent(storyId)}`}>Hoàn tất nhân vật & bắt đầu</Link></div>}
         
-        {/* Top Navigation Bar - Holographic Tabs */}
-        <div className="play-navigation" style={{ display: "flex", gap: "0.5rem", paddingBottom: "1rem", borderBottom: "1px solid rgba(255,255,255,0.05)", marginBottom: "1rem", overflowX: "auto", flexShrink: 0, position: "relative" }}>
-          {[
-            { key: "story", label: "TRUYỆN", icon: <BookOpen size={16}/> },
-            { key: "map", label: "BẢN ĐỒ", icon: <MapPin size={16}/> },
-            { key: "relations", label: "QUAN HỆ", icon: <Network size={16}/> },
-            { key: "journal", label: "NHẬT KÝ", icon: <Scroll size={16}/> },
-            { key: "timeline", label: "CỐT TRUYỆN", icon: <Route size={16}/> },
-            { key: "market", label: "CỬA HÀNG", icon: <ShoppingBag size={16}/> },
-            { key: "factions", label: "THẾ LỰC", icon: <Flag size={16}/> },
-          ].map(t => (
-            <button
-              key={t.key}
-              disabled={isLoading || isProcessing}
-              aria-pressed={mainTab === t.key}
-              onClick={() => setMainTab(t.key as typeof mainTab)}
-              style={{
-                position: "relative",
-                padding: "0.8rem 1.5rem",
-                background: "transparent",
-                border: "none",
-                color: mainTab === t.key ? "#fff" : "var(--text-muted)",
-                fontSize: "0.8rem",
-                fontWeight: 800,
-                letterSpacing: "1px",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                gap: "0.5rem",
-                transition: "color 0.3s"
-              }}
-            >
-              <span style={{ opacity: mainTab === t.key ? 1 : 0.5 }}>{t.icon}</span>
-              {t.label}
-              {mainTab === t.key && (
-                <motion.div
-                  layoutId="activeTabIndicator"
-                  style={{
-                    position: "absolute",
-                    bottom: -1,
-                    left: 0,
-                    right: 0,
-                    height: 2,
-                    background: "var(--accent-primary)",
-                    boxShadow: "0 0 10px var(--accent-primary)"
-                  }}
-                />
-              )}
-            </button>
-          ))}
-        </div>
-
         {/* Tab Content */}
-        {mainTab === "story" && <StoryPanel />}
+        {mainTab === "story" && <StoryPanel focusMode={focusMode} onToggleFocus={() => setFocusMode(value => !value)} />}
         {mainTab === "journal" && <div className="glass-panel" style={{flex:1,overflowY:"auto",padding:"1.5rem"}}><DecisionJournal/></div>}
         
         {mainTab === "map" && (

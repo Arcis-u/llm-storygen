@@ -77,3 +77,17 @@ Kiểm chứng bản chốt:
 - 10 kiểm thử frontend đạt: SSE/store (7) và giới hạn cỡ chữ, persistence/restore, dữ liệu cài đặt lỗi (3). 23 kiểm thử backend offline đạt.
 - Playwright: desktop 1440px, laptop 1366×768, mobile 390px/320px; chuyển sáu thế giới không đổi chiều cao; CTA, menu, demo/reset, không tràn ngang; tìm chương không dấu/không kết quả; chọn chương/đọc liên tục; lưu lựa chọn sau reload; hover/touch ba lựa chọn; đóng hộp thoại, focus, reduced motion; lượt fixture D20, nhật ký và lỗi stream.
 - Ảnh/script QA nằm trong `output/playwright/interface-*` ở máy làm việc, không đưa cache/ảnh kiểm tra vào Git. Database và AI được giả lập cho kiểm tra trình duyệt; không sửa `.env`.
+
+## Mở rộng không gian đọc — 30/09/2026
+
+Vùng truyện trước đây bị chia nhỏ bởi một hàng tab riêng, ảnh mở chương cao và bảng lựa chọn cố định. Giải pháp ưu tiên chỗ đọc nhưng vẫn giữ các điều khiển dễ tìm:
+
+- Gộp bảy tab vào thanh đầu cùng thư viện, chế độ tập trung và cài đặt. Desktop dùng một hàng; điện thoại dùng dải tab cuộn ngang ngay dưới các nút tiện ích để giữ nhãn và vùng bấm dễ dùng.
+- Cột chữ mặc định tăng từ 740 lên 920px; tùy chọn rộng tăng từ 980 lên 1120px. Thu gọn sidebar và ảnh mở chương, tăng độ tương phản chữ; tiêu đề dài tự nới chiều cao thay vì bị cắt.
+- Đặt bảng lựa chọn sau phần truyện trong cùng vùng cuộn. Thanh điều hướng nhỏ luôn sẵn để về đầu chương, tới lựa chọn hoặc tới phần đang viết; desktop có thêm nút ẩn/hiện HUD. Giữ hover một nút mở mô tả cả ba và nút xem mô tả trên cảm ứng.
+- Theo dõi chương đang đọc bằng scroll listener thụ động và requestAnimationFrame, hỗ trợ cả cuộn trong panel và cuộn trang trên mobile. Khi có chương mới, trở về đầu chương; chuyển tab trên mobile đặt lại cuộn sau khi nội dung mới xuất hiện để hủy cuộn mượt còn dở.
+- Chế độ cuộn liên tục dùng animation phù hợp với nhiều chương; các nút chuyển vị trí hỗ trợ reduced motion và đưa focus tới nội dung đích.
+
+Kiểm chứng: production build, TypeScript, ESLint trang chơi và 10 kiểm thử frontend đạt. Playwright kiểm tra desktop 1920×900, laptop 1366×768, tablet 1024px và mobile 390/320px: vị trí tab cùng hàng cài đặt, không tràn ngang, hover/touch, cài đặt, HUD, chuyển chương, mục lục, cuộn liên tục, chuyển tab giữa lúc cuộn, reduced motion và tiêu đề dài. Ở 1920×900, vùng cuộn truyện cao khoảng 686px, cột chữ 920px và ảnh mở chương thông thường cao 153px. Không ghi nhận lỗi JavaScript hoặc cảnh báo AnimatePresence trong quy trình điều hướng đã kiểm tra.
+
+Ảnh/script QA có tiền tố `reading-` trong `output/playwright/`, được bỏ qua bởi Git. Kiểm tra trình duyệt dùng API fixture; chưa xác nhận backend AI/Atlas thật trong vòng UI này.
