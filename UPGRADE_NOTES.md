@@ -101,3 +101,9 @@ Kiểm chứng: production build, TypeScript, ESLint trang chơi và 10 kiểm t
 - Thêm `backend/scripts/rebuild_story_memory.py`: mặc định dry-run, chỉ ghi khi `--apply`, yêu cầu collection đích riêng, kiểm tra profile và số vector. Collection nguồn được giữ nguyên. Có thể staging bằng `--dimensions` và `--base-url`, rồi đổi `.env` sau khi kiểm tra hoàn tất.
 
 Kiểm chứng: 36 kiểm thử backend offline đạt, gồm 13 kiểm thử mới về provider/dimensions, lỗi vector, đoạn cuối chương, retry không trùng, lọc câu chuyện và đường index nền. Kiểm tra thật với endpoint Alibaba do người dùng cung cấp trả về 2048 chiều. Đã rebuild 36 chương từ Atlas thành 103 vector ở collection mới, đối chiếu toàn bộ payload với nguồn MongoDB; 2 vector nguồn cũ còn nguyên. Truy hồi thật bằng nội dung cuối chương trả về đoạn chứa đúng phần cuối. Chưa chạy một lượt sinh truyện LLM mới và chưa đo chất lượng truy hồi trên một bộ benchmark tiếng Việt.
+
+## Qwen 3.8 Max — 30/09/2026
+
+Theo yêu cầu người dùng, đổi `DIRECTOR_MODEL` và `WRITER_MODEL` trong cấu hình cục bộ từ `alibaba/qwen3.7-plus` sang `alibaba/qwen3.8-max`; cập nhật hai vai trò này trong `.env.example`. Critic dùng chung `DIRECTOR_MODEL` nên cũng chuyển sang Max. Editor/GameMaster vẫn dùng Qwen 3.8 Flash; embedding Qwen 3.7 ở 2048 chiều, endpoint và dữ liệu truyện được giữ nguyên. `.env` riêng không được đưa lên Git.
+
+Kiểm chứng: Settings nạp đúng model và factory gửi tên API `qwen3.8-max` qua endpoint hiện có. Hai yêu cầu thật bằng LangChain đã trả lời thành công: văn bản ở giới hạn 2048 token và `CriticOutput` có cấu trúc ở giới hạn 500 token, đều kết thúc bình thường. 36 kiểm thử backend offline đạt. Chưa chạy toàn bộ lượt sinh truyện hay đo chất lượng/độ trễ của Max so với Plus.
